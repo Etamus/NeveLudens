@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableExtensions
-title NeveLudens - Instalacao
+title NeveLudens
 cd /d "%~dp0"
 
 set "ROOT=%CD%"
@@ -26,7 +26,7 @@ goto menu
 cls
 call :banner
 echo [1] Instalar
-echo [2] Verificar ambiente atual
+echo [2] Verificar Ambiente Atual
 echo [3] Sair
 echo.
 choice /c 123 /n /m "Escolha uma opcao: "
@@ -107,7 +107,7 @@ exit /b 0
 
 :banner
 echo ================================================================
-echo NeveLudens - instalacao local
+echo NeveLudens
 echo ================================================================
 echo Projeto: %ROOT%
 echo.

@@ -111,7 +111,7 @@ $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="NeveLudens - Iniciar"
-        Width="840" Height="580"
+        Width="840" Height="640"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -233,6 +233,37 @@ $xaml = @"
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="MinHeight" Value="32"/>
         </Style>
+
+        <Style x:Key="ToggleCheck" TargetType="CheckBox">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="#111111"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="SwitchTrack" Width="42" Height="24" CornerRadius="12" Background="#D4D4D8">
+                                <Ellipse x:Name="SwitchThumb" Width="18" Height="18" Fill="White" Margin="3" HorizontalAlignment="Left"/>
+                            </Border>
+                            <ContentPresenter Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="SwitchTrack" Property="Background" Value="#111111"/>
+                                <Setter TargetName="SwitchThumb" Property="HorizontalAlignment" Value="Right"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="SwitchTrack" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border CornerRadius="14" Background="#FAFAFA" BorderBrush="#E4E4E7" BorderThickness="1">
@@ -278,6 +309,8 @@ $xaml = @"
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Text="Janela detectada:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
@@ -303,7 +336,20 @@ $xaml = @"
                                 </ComboBox>
                             </StackPanel>
 
-                            <Button Grid.Row="5" x:Name="RefreshButton" Content="Atualizar" Style="{StaticResource GhostBtn}"
+                            <StackPanel Grid.Row="5" Margin="0,12,0,0">
+                                <TextBlock Text="Modo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="RuntimeModeCombo">
+                                    <ComboBoxItem Content="Precisão" Tag="precision" IsSelected="True"/>
+                                    <ComboBoxItem Content="Tempo real" Tag="realtime"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="6" Margin="0,12,0,0">
+                                <CheckBox x:Name="MenuActionsCheck" Content="Permitir ações de menu" IsChecked="True"
+                                          Style="{StaticResource ToggleCheck}"/>
+                            </StackPanel>
+
+                            <Button Grid.Row="7" x:Name="RefreshButton" Content="Atualizar" Style="{StaticResource GhostBtn}"
                                     HorizontalAlignment="Right" Margin="0,18,0,0"/>
                         </Grid>
                     </Border>
@@ -349,6 +395,8 @@ $BtnClose = $window.FindName("BtnClose")
 $ProcessCombo = $window.FindName("ProcessCombo")
 $ManualProcessBox = $window.FindName("ManualProcessBox")
 $BackendCombo = $window.FindName("BackendCombo")
+$RuntimeModeCombo = $window.FindName("RuntimeModeCombo")
+$MenuActionsCheck = $window.FindName("MenuActionsCheck")
 $RefreshButton = $window.FindName("RefreshButton")
 $StartButton = $window.FindName("StartButton")
 $DiagnoseButton = $window.FindName("DiagnoseButton")
@@ -466,6 +514,18 @@ function Get-BackendName {
         return [string]$selected.Tag
     }
     return "auto"
+}
+
+function Get-RuntimeMode {
+    $selected = $RuntimeModeCombo.SelectedItem
+    if ($selected -and $selected.Tag) {
+        return [string]$selected.Tag
+    }
+    return "precision"
+}
+
+function Get-AllowMenuActions {
+    return [bool]$MenuActionsCheck.IsChecked
 }
 
 function Set-RunButtonState {
@@ -619,9 +679,15 @@ $StartButton.Add_Click({
             "scripts\launcher.py",
             "--process", $processName,
             "--screenshot-backend", (Get-BackendName),
+            "--runtime-mode", (Get-RuntimeMode),
             "--port", "5555",
             "--non-interactive"
         )
+        if (Get-AllowMenuActions) {
+            $launchArgs += "--allow-menu"
+        } else {
+            $launchArgs += "--block-menu"
+        }
         Start-LoggedPython -Arguments $launchArgs -StartedMessage ("Iniciando NeveLudens para {0}..." -f $processName) -IsAgent
     } catch {
         $message = "Falha ao iniciar: {0}" -f $_.Exception.Message

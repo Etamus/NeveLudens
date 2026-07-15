@@ -4,7 +4,6 @@ import platform
 import pyautogui
 import dxcam
 import pywinctl as pwc
-import xspeedhack as xsh
 from gymnasium import Env
 from gymnasium.spaces import Box, Dict, Discrete
 from PIL import Image, ImageChops, ImageStat
@@ -480,6 +479,7 @@ class GamepadEnv(Env):
             env_fps=10,
             async_mode=True,
             screenshot_backend="auto",
+            runtime_mode="precision",
     ):
         super().__init__()
 
@@ -488,6 +488,7 @@ class GamepadEnv(Env):
         assert os_name == "windows", "This environment is currently only supported on Windows."
         assert controller_type in ["xbox", "ps4"], "Platform must be either 'xbox' or 'ps4'"
         assert screenshot_backend in ["auto", "pyautogui", "dxcam"], "Screenshot backend must be 'auto', 'pyautogui', or 'dxcam'"
+        assert runtime_mode in ["precision", "realtime"], "Runtime mode must be 'precision' or 'realtime'"
 
         self.game = game
         self.image_height = int(image_height)
@@ -496,6 +497,7 @@ class GamepadEnv(Env):
         self.env_fps = env_fps
         self.step_duration = self.calculate_step_duration()
         self.async_mode = async_mode
+        self.runtime_mode = runtime_mode
 
         self.gamepad_emulator = GamepadEmulator(controller_type=controller_type, system=os_name)
         proc_info = get_process_info(game)
@@ -559,8 +561,14 @@ class GamepadEnv(Env):
         self.dxcam_region = (l, t, r, b)
         print(f"Capture region: left={l}, top={t}, width={width}, height={height}, backend={screenshot_backend}")
 
-        # Initialize speedhack client if using DLL injection
-        self.speedhack_client = xsh.Client(process_id=self.game_pid, arch=self.game_arch)
+        self.speedhack_client = None
+        if self.runtime_mode == "precision":
+            import xspeedhack as xsh
+            # Precision mode keeps the original stepped execution model.
+            self.speedhack_client = xsh.Client(process_id=self.game_pid, arch=self.game_arch)
+            print("Runtime mode: precision (stepped xspeedhack)")
+        else:
+            print("Runtime mode: realtime (no xspeedhack)")
 
         # Get the screenshot backend
         if screenshot_backend == "auto":
@@ -589,13 +597,15 @@ class GamepadEnv(Env):
         """
         Unpause the game using the specified method.
         """
-        self.speedhack_client.set_speed(1.0)
+        if self.speedhack_client is not None:
+            self.speedhack_client.set_speed(1.0)
 
     def pause(self):
         """
         Pause the game using the specified method.
         """
-        self.speedhack_client.set_speed(0.0)
+        if self.speedhack_client is not None:
+            self.speedhack_client.set_speed(0.0)
 
     def perform_action(self, action, duration):
         """
@@ -606,14 +616,17 @@ class GamepadEnv(Env):
         duration (float): Duration for the action step.
         """
         self.gamepad_emulator.step(action)
-        start = time.perf_counter()
-        self.unpause()
-        # Wait until the next step
-        end = start + self.step_duration
-        now = time.perf_counter()
-        while now < end:
+        if self.runtime_mode == "precision":
+            start = time.perf_counter()
+            self.unpause()
+            # Wait until the next step
+            end = start + self.step_duration
             now = time.perf_counter()
-        self.pause()
+            while now < end:
+                now = time.perf_counter()
+            self.pause()
+        else:
+            time.sleep(duration)
 
     def step(self, action, step_duration=None):
         """

@@ -22,6 +22,7 @@ parser.add_argument("--allow-menu", action="store_true", help="Allow menu action
 parser.add_argument("--block-menu", action="store_true", help="Block START/BACK/GUIDE menu actions")
 parser.add_argument("--port", type=int, default=5555, help="Port for model server")
 parser.add_argument("--screenshot-backend", choices=["auto", "dxcam", "pyautogui"], default="auto", help="Screenshot backend")
+parser.add_argument("--runtime-mode", choices=["precision", "realtime"], default="precision", help="Runtime mode")
 parser.add_argument("--no-special-init", action="store_true", help="Skip game-specific startup button macro")
 parser.add_argument("--no-unstuck", action="store_true", help="Disable supervisor recovery skills")
 
@@ -32,6 +33,7 @@ policy = ModelClient(port=args.port)
 policy.reset()
 policy_info = policy.info()
 action_downsample_ratio = policy_info["action_downsample_ratio"]
+print(f"Modo de execucao: {args.runtime_mode}")
 
 CKPT_NAME = Path(policy_info["ckpt_path"]).stem
 if not menu_allowed:
@@ -117,6 +119,7 @@ try:
         env_fps=60,
         async_mode=True,
         screenshot_backend=args.screenshot_backend,
+        runtime_mode=args.runtime_mode,
     )
 except ValueError as exc:
     print()

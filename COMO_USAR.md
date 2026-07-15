@@ -33,14 +33,17 @@ iniciar.bat
 
 4. Selecione o processo do jogo na lista ou digite o nome exato do `.exe`.
 5. Deixe a captura em `Automática`, a menos que queira testar manualmente `dxcam` ou `pyautogui`.
-6. Clique em **Iniciar**.
-7. Para parar, clique em **Parar** no mesmo botão.
+6. Deixe o modo em **Precisão** ou escolha **Tempo real**.
+7. Deixe `START / BACK / GUIDE` ativado ou desative se quiser bloquear ações de menu.
+8. Clique em **Iniciar**.
+9. Para parar, clique em **Parar** no mesmo botão.
 
 Padrões atuais:
 
 - Porta do servidor: `5555`.
-- `START`, `BACK` e `GUIDE`: sempre liberados.
+- `START`, `BACK` e `GUIDE`: liberados por padrão, com toggle na interface.
 - Captura: `dxcam` primeiro, `pyautogui` como fallback conservador.
+- Modo padrão: `Precisão`.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
 ## Diagnóstico de captura

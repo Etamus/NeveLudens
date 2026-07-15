@@ -43,6 +43,8 @@ Abre a interface principal em WPF. Por ela você pode:
 - Selecionar uma janela de jogo detectada.
 - Digitar manualmente o nome do `.exe`.
 - Escolher o modo de captura: `auto`, `dxcam` ou `pyautogui`.
+- Escolher o modo de execução: `Precisão` ou `Tempo real`.
+- Ativar ou desativar ações `START`, `BACK` e `GUIDE`.
 - Iniciar e parar o agente.
 - Rodar diagnóstico de captura.
 - Acompanhar o log de execução na própria janela.
@@ -50,9 +52,15 @@ Abre a interface principal em WPF. Por ela você pode:
 Padrões atuais:
 
 - Porta do servidor: `5555`.
-- Ações `START`, `BACK` e `GUIDE`: sempre liberadas.
+- Ações `START`, `BACK` e `GUIDE`: liberadas por padrão, com toggle na interface.
 - Captura recomendada: `auto`.
+- Modo padrão: `Precisão`.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
+
+Modos de execução:
+
+- `Precisão`: comportamento original. Usa execução em passos com `xspeedhack`.
+- `Tempo real`: não usa `xspeedhack`; apenas captura a tela e envia controle virtual.
 
 ### `instalar.bat`
 
@@ -189,8 +197,9 @@ Pastas usadas:
 3. Clique em **Atualizar** se o jogo não aparecer.
 4. Selecione o jogo ou digite o nome do `.exe`.
 5. Deixe a captura em `auto`.
-6. Clique em **Iniciar**.
-7. Para parar, clique em **Parar** no mesmo botão.
+6. Deixe o modo em **Precisão** ou escolha **Tempo real**.
+7. Clique em **Iniciar**.
+8. Para parar, clique em **Parar** no mesmo botão.
 
 Se o agente parecer cego, vendo tela preta ou reagindo a uma imagem congelada, use **Diagnosticar** na própria interface.
 
