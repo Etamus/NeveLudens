@@ -1,36 +1,66 @@
 # NeveLudens
 
-NeveLudens é uma adaptação local para executar um agente visual de jogos no Windows. O projeto carrega um checkpoint em `models/ng.pt`, captura a janela de um jogo, envia os frames para um servidor de inferência local e aplica as ações previstas por meio de um controle virtual.
+NeveLudens e um agente visual local para jogos no Windows. Ele carrega um checkpoint em `models/ng.pt`, captura a janela do jogo, executa inferencia em um servidor local e envia acoes por um controle virtual.
 
-O foco deste estado do projeto é facilitar o uso: abrir um jogo, rodar `iniciar.bat`, escolher o processo `.exe` e deixar o launcher preparar o servidor e o player.
+O projeto agora deixou de ser apenas um player reativo. Ele ganhou uma camada de agente em volta do modelo: percepcao, memoria temporal, supervisor de objetivos, biblioteca de skills e perfis por jogo.
 
 ## Estado Atual
 
-- Execução principal por `iniciar.bat`.
-- Ambiente Python isolado em `.venv`, dentro do próprio projeto.
-- Dependências e caches direcionados para pastas locais do projeto.
+- Execucao principal por `iniciar.bat`.
+- Ambiente Python isolado em `.venv`, dentro do proprio projeto.
+- Dependencias e caches direcionados para pastas locais.
 - Checkpoint esperado em `models/ng.pt`.
-- Servidor de inferência na porta padrão `5555`.
-- Captura em modo automático: tenta `dxcam` primeiro e cai para `pyautogui` se a captura ficar preta ou praticamente congelada por vários frames.
-- Bloqueio opcional de ações de menu (`START`, `BACK`, `GUIDE`) para evitar que o agente fique preso em menus.
-- Macro especial de inicialização ativada automaticamente para `isaac-ng.exe` e `Cuphead.exe`.
-- Lógica de destravamento: se a imagem quase não muda por vários passos, o player força brevemente os analógicos em direções alternadas.
-- Gravação de vídeos, ações e frames de depuração em `out` e `debug`.
+- Servidor de inferencia na porta padrao `5555`.
+- Captura automatica: tenta `dxcam` primeiro e cai para `pyautogui` se a captura ficar preta ou congelada por varios frames.
+- Supervisor de objetivos entre o modelo e o jogo.
+- Memoria temporal curta para detectar loops, tela parada, loading e repeticao de acoes.
+- Biblioteca de skills com `wait_loading`, `unstuck` e `break_repetition`.
+- Perfis para `isaac-ng.exe`, `Cuphead.exe`, `celeste.exe`, `granblue_fantasy_relink.exe` e perfil generico.
+- Log do supervisor em `out/<modelo>/*_SUPERVISOR.json`.
+- Videos, acoes e frames de debug em `out` e `debug`.
+
+## Arquitetura
+
+O fluxo atual e:
+
+```text
+Frame limpo do jogo
+  -> modelo visual gera acoes
+  -> percepcao analisa o frame em paralelo
+  -> memoria resume o que vem acontecendo
+  -> perfil do jogo ajusta regras
+  -> supervisor decide se aceita, filtra ou substitui a acao
+  -> skill library pode executar uma rotina de recuperacao
+  -> controle virtual envia a acao final
+```
+
+O modelo continua recebendo o frame limpo. As analises do supervisor nao sao desenhadas por cima da imagem, entao elas nao confundem a inferencia.
+
+## Modulos Principais
+
+- `neveludens/perception.py`: extrai sinais visuais leves, como brilho, contraste, movimento, tela escura, loading provavel e tela estatica.
+- `neveludens/memory.py`: guarda memoria temporal curta, repeticao de acoes, streaks visuais e eventos.
+- `neveludens/profiles.py`: define comportamento por jogo ou genero.
+- `neveludens/skills.py`: contem rotinas reutilizaveis de recuperacao.
+- `neveludens/supervisor.py`: coordena percepcao, memoria, perfil, skills e acoes do modelo.
+- `scripts/play.py`: loop principal de jogo.
+- `scripts/serve.py`: servidor local de inferencia.
+- `scripts/launcher.py`: menu usado por `iniciar.bat`.
 
 ## Requisitos
 
 - Windows.
 - Python 3.10 ou superior.
 - GPU NVIDIA com CUDA funcional no PyTorch.
-- O jogo precisa estar instalado e aberto no Windows.
-- O jogo precisa aceitar controle virtual.
+- Jogo instalado e aberto no Windows.
+- Jogo com suporte a controle virtual.
 
-O projeto não inclui jogos. Você deve usar suas próprias cópias.
+O projeto nao inclui jogos. Voce deve usar suas proprias copias.
 
-## Uso Rápido
+## Uso Rapido
 
 1. Abra o jogo.
-2. Deixe a janela do jogo visível.
+2. Deixe a janela do jogo visivel.
 3. Execute:
 
 ```bat
@@ -38,11 +68,11 @@ D:\NeveLudens\iniciar.bat
 ```
 
 4. Escolha o processo do jogo pela lista ou digite o nome exato do `.exe`.
-5. Normalmente responda `N` para permitir ações de menu.
+5. Normalmente responda `N` para permitir acoes de menu.
 6. Aguarde o servidor carregar o modelo.
 7. Para parar, volte para a janela do NeveLudens e pressione `Ctrl+C`.
 
-## Diagnóstico de Captura
+## Diagnostico de Captura
 
 Se o agente parecer cego, parado, vendo tela preta ou reagindo a algo errado, rode:
 
@@ -50,26 +80,22 @@ Se o agente parecer cego, parado, vendo tela preta ou reagindo a algo errado, ro
 D:\NeveLudens\diagnosticar_captura.bat
 ```
 
-O diagnóstico salva imagens em `debug` usando os backends de captura disponíveis. A imagem correta deve mostrar exatamente a janela do jogo.
+As imagens sao salvas em `debug`. A captura correta deve mostrar exatamente a janela do jogo.
 
-## Estrutura
+## Saidas Geradas
 
-- `neveludens/`: pacote Python principal.
-- `scripts/serve.py`: servidor local de inferência.
-- `scripts/play.py`: player que captura o jogo e executa ações.
-- `scripts/launcher.py`: menu usado por `iniciar.bat`.
-- `models/ng.pt`: checkpoint do modelo.
-- `debug/`: frames e capturas de diagnóstico.
-- `out/`: vídeos e arquivos de ações.
+- `debug/`: frames e capturas de diagnostico.
+- `out/<modelo>/*_DEBUG.mp4`: video com visualizacao de debug.
+- `out/<modelo>/*_CLEAN.mp4`: video limpo da captura.
+- `out/<modelo>/*_ACTIONS.json`: acoes finais enviadas ao jogo.
+- `out/<modelo>/*_SUPERVISOR.json`: decisoes do supervisor, percepcao e memoria.
 - `logs/`: logs do servidor.
-- `.venv/`: ambiente Python local.
-- `.cache/`: caches locais de dependências e modelos auxiliares.
 
-## Limitações
+## Limitacoes
 
-NeveLudens é um agente visual reativo. Ele prevê ações a partir da imagem observada, mas não possui planejamento longo, objetivo explícito, memória estratégica ou treinamento específico para cada jogo. Em jogos complexos, ele pode andar sem rumo, repetir padrões ou falhar em entender menus, fases e objetivos.
+NeveLudens ainda depende de um modelo visual reativo. O supervisor melhora estabilidade, evita alguns loops e aplica regras por jogo, mas nao substitui treinamento especifico, planejamento longo ou conhecimento profundo de cada jogo.
 
-As camadas de captura automática, bloqueio de menu e destravamento melhoram a usabilidade, mas não substituem treinamento específico nem transformam o agente em um jogador confiável para qualquer jogo.
+O projeto esta mais preparado para evoluir para um agente completo, mas ainda nao garante jogar qualquer jogo do inicio ao fim.
 
 ## Comandos Manuais
 
@@ -85,4 +111,4 @@ Rodar o player:
 .venv\Scripts\python.exe scripts\play.py --process nome_do_jogo.exe --port 5555 --screenshot-backend auto
 ```
 
-Na prática, prefira `iniciar.bat`, pois ele prepara o ambiente e usa os padrões atuais do projeto.
+Na pratica, prefira `iniciar.bat`, pois ele prepara o ambiente e usa os padroes atuais.

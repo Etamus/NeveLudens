@@ -7,12 +7,13 @@ from collections import OrderedDict
 
 import cv2
 import numpy as np
-from PIL import Image, ImageChops, ImageStat
+from PIL import Image
 
 from neveludens.game_env import GamepadEnv
 from neveludens.shared import BUTTON_ACTION_TOKENS, PATH_REPO
 from neveludens.inference_viz import create_viz, VideoRecorder
 from neveludens.inference_client import ModelClient
+from neveludens.supervisor import ObjectiveSupervisor
 
 import argparse
 parser = argparse.ArgumentParser(description="VLM Inference")
@@ -21,7 +22,7 @@ parser.add_argument("--allow-menu", action="store_true", help="Allow menu action
 parser.add_argument("--port", type=int, default=5555, help="Port for model server")
 parser.add_argument("--screenshot-backend", choices=["auto", "dxcam", "pyautogui"], default="auto", help="Screenshot backend")
 parser.add_argument("--no-special-init", action="store_true", help="Skip game-specific startup button macro")
-parser.add_argument("--no-unstuck", action="store_true", help="Disable automatic unstuck actions")
+parser.add_argument("--no-unstuck", action="store_true", help="Disable supervisor recovery skills")
 
 args = parser.parse_args()
 
@@ -44,18 +45,6 @@ PATH_OUT = (PATH_REPO / "out" / CKPT_NAME).resolve()
 PATH_OUT.mkdir(parents=True, exist_ok=True)
 
 BUTTON_PRESS_THRES = 0.5
-STUCK_FRAME_DIFF_THRES = 0.35
-STUCK_FRAME_LIMIT = 12
-UNSTUCK_COOLDOWN_STEPS = 8
-UNSTUCK_ACTIONS_PER_TRIGGER = 10
-UNSTUCK_DIRECTIONS = [
-    (26000, 0),
-    (-26000, 0),
-    (0, -26000),
-    (0, 26000),
-    (22000, -18000),
-    (-22000, 18000),
-]
 
 # Find in path_out the list of existing video files, named 0001.mp4, 0002.mp4, etc.
 # If they exist, find the max number and set the next number to be max + 1
@@ -70,31 +59,22 @@ else:
 PATH_MP4_DEBUG = PATH_OUT / f"{next_number:04d}_DEBUG.mp4"
 PATH_MP4_CLEAN = PATH_OUT / f"{next_number:04d}_CLEAN.mp4"
 PATH_ACTIONS = PATH_OUT / f"{next_number:04d}_ACTIONS.json"
+PATH_SUPERVISOR = PATH_OUT / f"{next_number:04d}_SUPERVISOR.json"
+
+supervisor = ObjectiveSupervisor(
+    process_name=args.process,
+    allow_menu=args.allow_menu,
+    enable_skills=not args.no_unstuck,
+    log_path=PATH_SUPERVISOR,
+)
+print(f"Supervisor profile: {supervisor.profile.name} ({supervisor.profile.genre})")
+if args.no_unstuck:
+    print("Supervisor recovery skills disabled.")
 
 def preprocess_img(main_image):
     main_cv = cv2.cvtColor(np.array(main_image), cv2.COLOR_RGB2BGR)
     final_image = cv2.resize(main_cv, (256, 256), interpolation=cv2.INTER_AREA)
     return Image.fromarray(cv2.cvtColor(final_image, cv2.COLOR_BGR2RGB))
-
-
-def frame_diff_score(current, previous):
-    diff = ImageChops.difference(current.convert("L"), previous.convert("L"))
-    return ImageStat.Stat(diff).mean[0]
-
-
-def apply_unstuck_actions(env_actions, attempt):
-    lx, ly = UNSTUCK_DIRECTIONS[attempt % len(UNSTUCK_DIRECTIONS)]
-    rx, ry = UNSTUCK_DIRECTIONS[(attempt + 2) % len(UNSTUCK_DIRECTIONS)]
-    forced_count = min(UNSTUCK_ACTIONS_PER_TRIGGER, len(env_actions))
-
-    for action in env_actions[:forced_count]:
-        action["AXIS_LEFTX"] = np.array([lx], dtype=np.long)
-        action["AXIS_LEFTY"] = np.array([ly], dtype=np.long)
-        action["AXIS_RIGHTX"] = np.array([rx], dtype=np.long)
-        action["AXIS_RIGHTY"] = np.array([ry], dtype=np.long)
-        action["_UNSTUCK"] = 1
-
-    return forced_count, (lx, ly), (rx, ry)
 
 zero_action = OrderedDict(
         [ 
@@ -178,10 +158,6 @@ obs, reward, terminated, truncated, info = env.step(action=zero_action)
 
 frames = None
 step_count = 0
-previous_model_obs = None
-still_frame_count = 0
-last_unstuck_step = -UNSTUCK_COOLDOWN_STEPS
-unstuck_attempt = 0
 
 with VideoRecorder(str(PATH_MP4_DEBUG), fps=60, crf=32, preset="medium") as debug_recorder:
     with VideoRecorder(str(PATH_MP4_CLEAN), fps=60, crf=28, preset="medium") as clean_recorder:
@@ -189,22 +165,7 @@ with VideoRecorder(str(PATH_MP4_DEBUG), fps=60, crf=32, preset="medium") as debu
             while True:
                 obs = preprocess_img(obs)
                 obs.save(PATH_DEBUG / f"{step_count:05d}.png")
-
-                should_unstuck = False
-                if not args.no_unstuck and previous_model_obs is not None:
-                    motion = frame_diff_score(obs, previous_model_obs)
-                    if motion <= STUCK_FRAME_DIFF_THRES:
-                        still_frame_count += 1
-                    else:
-                        still_frame_count = 0
-
-                    if (
-                        still_frame_count >= STUCK_FRAME_LIMIT
-                        and step_count - last_unstuck_step >= UNSTUCK_COOLDOWN_STEPS
-                    ):
-                        should_unstuck = True
-
-                previous_model_obs = obs.copy()
+                supervisor.observe(obs, step_count)
 
                 pred = policy.predict(obs)
 
@@ -239,29 +200,13 @@ with VideoRecorder(str(PATH_MP4_DEBUG), fps=60, crf=32, preset="medium") as debu
 
                     env_actions.append(move_action)
 
-                if should_unstuck:
-                    forced_count, left_dir, right_dir = apply_unstuck_actions(env_actions, unstuck_attempt)
-                    print(
-                        "Image barely changed for "
-                        f"{still_frame_count} model steps; forcing unstuck action "
-                        f"#{unstuck_attempt + 1} on {forced_count} subactions "
-                        f"(left={left_dir}, right={right_dir})"
-                    )
-                    last_unstuck_step = step_count
-                    unstuck_attempt += 1
-                    still_frame_count = 0
+                decision = supervisor.process_actions(env_actions, step_count)
+                if decision.reasons:
+                    print(f"Supervisor[{decision.profile}/{decision.objective}]: {'; '.join(decision.reasons)}")
 
                 print(f"Executing {len(env_actions)} actions, each action will be repeated {action_downsample_ratio} times")
 
                 for i, a in enumerate(env_actions):
-                    if NO_MENU:
-                        blocked = [name for name in ("GUIDE", "START", "BACK") if a[name]]
-                        if blocked:
-                            print(f"Model predicted menu action(s) {blocked}, disabling them")
-                        a["GUIDE"] = 0
-                        a["START"] = 0
-                        a["BACK"] = 0
-
                     for _ in range(action_downsample_ratio):
                         obs, reward, terminated, truncated, info = env.step(action=a)
 
