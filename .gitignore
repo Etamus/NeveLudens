@@ -1,0 +1,53 @@
+# Ambientes Python locais
+.venv/
+venv/
+env/
+
+# Caches e bytecode Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Metadados gerados por packaging
+*.egg-info/
+build/
+dist/
+
+# Caches locais do projeto
+.cache/
+models/.cache/
+
+# Checkpoints/modelos pesados
+models/*.pt
+models/*.pth
+models/*.ckpt
+models/*.safetensors
+
+# Saidas de execucao
+debug/
+out/
+logs/
+
+# Config local do usuario
+neveludens_local_config.json
+
+# Midia gerada
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Logs e temporarios
+*.log
+*.tmp
+*.temp
+
+# Sistema/editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
