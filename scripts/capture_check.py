@@ -27,7 +27,7 @@ def find_window(process_name: str):
     for window in pwc.getAllWindows():
         if window.title == window_name:
             return window
-    raise RuntimeError(f"Nao encontrei janela visivel para {process_name}.")
+    raise RuntimeError(f"Não encontrei janela visível para {process_name}.")
 
 
 def stats(image: Image.Image) -> tuple[tuple[float, float, float], bool]:
@@ -83,7 +83,7 @@ def save_capture(process_name: str, backend: str) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Test NeveLudens game capture")
+    parser = argparse.ArgumentParser(description="Testar captura de jogo do NeveLudens")
     parser.add_argument("--process", type=str, default="", help="Game executable name")
     parser.add_argument("--backend", choices=["all", "dxcam", "pyautogui"], default="all")
     args = parser.parse_args()

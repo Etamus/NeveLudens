@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import argparse
 import pickle
 import socket
 import subprocess
@@ -19,6 +20,25 @@ CONFIG_PATH = REPO / "neveludens_local_config.json"
 LOG_DIR = REPO / "logs"
 DEFAULT_PORT = 5555
 MODEL_REPO = "nvidia/" + "Nitro" + "Gen"
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="NeveLudens local launcher")
+    parser.add_argument("--process", type=str, default="", help="Game executable name")
+    parser.add_argument(
+        "--screenshot-backend",
+        choices=["auto", "dxcam", "pyautogui"],
+        default="auto",
+        help="Screenshot backend. 'auto' uses dxcam first and pyautogui as fallback.",
+    )
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Local inference server port")
+    parser.add_argument("--no-special-init", action="store_true", help="Skip Isaac/Cuphead startup macro")
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Fail instead of asking for a process when --process is missing.",
+    )
+    return parser.parse_args(argv)
 
 
 def local_env() -> dict[str, str]:
@@ -64,7 +84,7 @@ def console_safe(text: str) -> str:
 
 def preflight() -> None:
     if not VENV_PYTHON.exists():
-        raise RuntimeError("Ambiente .venv nao encontrado. Rode iniciar.bat novamente.")
+        raise RuntimeError("Ambiente .venv não encontrado. Rode iniciar.bat novamente.")
 
     if not CHECKPOINT.exists():
         download_checkpoint()
@@ -74,7 +94,7 @@ def preflight() -> None:
 
     if not torch.cuda.is_available():
         raise RuntimeError(
-            "PyTorch nao encontrou CUDA. O NeveLudens atual exige GPU NVIDIA com CUDA."
+            "PyTorch não encontrou CUDA. O NeveLudens atual exige GPU NVIDIA com CUDA."
         )
 
     # Create and release one virtual controller to catch driver problems early.
@@ -88,10 +108,10 @@ def preflight() -> None:
 
 
 def download_checkpoint() -> None:
-    print("Checkpoint nao encontrado. Baixando modelo base ng.pt...")
+    print("Checkpoint não encontrado. Baixando modelo base ng.pt...")
     (REPO / "models").mkdir(exist_ok=True)
     if not HF_EXE.exists():
-        raise RuntimeError("Comando hf.exe nao encontrado na .venv.")
+        raise RuntimeError("Comando hf.exe não encontrado na .venv.")
     subprocess.check_call(
         [str(HF_EXE), "download", MODEL_REPO, "ng.pt", "--local-dir", "models"],
         cwd=REPO,
@@ -177,7 +197,7 @@ def choose_process(config: dict) -> str:
             idx = int(answer)
             if 1 <= idx <= len(processes):
                 return processes[idx - 1][0]
-            print("Numero fora da lista.")
+            print("Número fora da lista.")
             continue
         if answer:
             if not answer.lower().endswith(".exe"):
@@ -185,48 +205,6 @@ def choose_process(config: dict) -> str:
             return answer
 
         print("Informe um processo ou pressione R para atualizar.")
-
-
-def prompt_bool(prompt: str, default: bool = False) -> bool:
-    suffix = " [S/n]: " if default else " [s/N]: "
-    while True:
-        answer = input(prompt + suffix).strip().lower()
-        if not answer:
-            return default
-        if answer in {"s", "sim", "y", "yes"}:
-            return True
-        if answer in {"n", "nao", "no"}:
-            return False
-        print("Responda com S ou N.")
-
-
-def prompt_port(config: dict) -> int:
-    default = int(config.get("port", DEFAULT_PORT))
-    while True:
-        answer = input(f"Porta do servidor [{default}]: ").strip()
-        if not answer:
-            return default
-        try:
-            port = int(answer)
-        except ValueError:
-            print("Digite um numero de porta.")
-            continue
-        if 1 <= port <= 65535:
-            return port
-        print("Porta precisa ficar entre 1 e 65535.")
-
-
-def prompt_screenshot_backend(config: dict) -> str:
-    default = str(config.get("screenshot_backend", "dxcam")).lower()
-    if default not in {"dxcam", "pyautogui"}:
-        default = "dxcam"
-    while True:
-        answer = input(f"Backend de captura [dxcam/pyautogui] [{default}]: ").strip().lower()
-        if not answer:
-            return default
-        if answer in {"dxcam", "pyautogui"}:
-            return answer
-        print("Use dxcam ou pyautogui.")
 
 
 def raw_port_open(port: int) -> bool:
@@ -239,7 +217,7 @@ def find_free_port(start: int) -> int:
     for port in range(start, 65536):
         if not raw_port_open(port):
             return port
-    raise RuntimeError("Nao encontrei porta livre.")
+    raise RuntimeError("Não encontrei porta livre.")
 
 
 def server_info(port: int, timeout_ms: int = 1000) -> dict | None:
@@ -354,7 +332,8 @@ def run_player(
     return subprocess.call(cmd, cwd=REPO, env=env)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     env = local_env()
     os.environ.update(env)
     header()
@@ -366,18 +345,25 @@ def main() -> int:
         return 1
 
     config = load_config()
-    process_name = choose_process(config)
-    if config.get("allow_menu"):
-        print("Aviso: a escolha anterior allow_menu=true foi descartada por seguranca.")
-    allow_menu = prompt_bool("Permitir acoes de menu START/BACK/GUIDE?", False)
-    if allow_menu:
-        print("Cuidado: isso pode abrir pause/options e prender o agente em menus.")
-    screenshot_backend = "auto"
-    special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"}
+    if args.process:
+        process_name = args.process.strip()
+        if not process_name.lower().endswith(".exe"):
+            process_name += ".exe"
+    elif args.non_interactive:
+        print("Nenhum processo informado. Escolha um jogo na interface antes de iniciar.")
+        return 2
+    else:
+        process_name = choose_process(config)
+
+    allow_menu = True
+    screenshot_backend = args.screenshot_backend
+    special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init
     if special_init:
-        print("Macro especial de inicializacao ativada para este jogo.")
-    print(f"Porta do servidor: {DEFAULT_PORT}")
-    port = DEFAULT_PORT
+        print("Macro especial de inicialização ativada para este jogo.")
+    print("Ações START/BACK/GUIDE: liberadas")
+    print(f"Captura: {screenshot_backend}")
+    print(f"Porta do servidor: {args.port}")
+    port = args.port
 
     if raw_port_open(port):
         info = server_info(port)
@@ -387,7 +373,7 @@ def main() -> int:
             log_path = None
         else:
             new_port = find_free_port(port + 1)
-            print(f"Porta {port} esta ocupada. Vou usar {new_port}.")
+            print(f"Porta {port} está ocupada. Vou usar {new_port}.")
             port = new_port
             server_proc, log_path = start_server(port, env)
             info = wait_for_server(server_proc, port, log_path)
@@ -399,11 +385,11 @@ def main() -> int:
     print(f"Jogo/processo: {process_name}")
     print(f"Porta: {port}")
     print("Captura: dxcam com fallback conservador para pyautogui")
-    print(f"Acoes de menu: {'liberadas' if allow_menu else 'bloqueadas'}")
+    print("Ações de menu: liberadas")
 
     config.update({
         "process": process_name,
-        "allow_menu": False,
+        "allow_menu": True,
         "screenshot_backend": screenshot_backend,
         "special_init": special_init,
         "port": port,
@@ -414,7 +400,7 @@ def main() -> int:
         return run_player(process_name, port, allow_menu, screenshot_backend, special_init, env)
     except KeyboardInterrupt:
         print()
-        print("Interrompido pelo usuario.")
+        print("Interrompido pelo usuário.")
         return 130
     finally:
         stop_server(server_proc)

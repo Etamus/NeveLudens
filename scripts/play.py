@@ -18,13 +18,15 @@ from neveludens.supervisor import ObjectiveSupervisor
 import argparse
 parser = argparse.ArgumentParser(description="VLM Inference")
 parser.add_argument("--process", type=str, default="celeste.exe", help="Game to play")
-parser.add_argument("--allow-menu", action="store_true", help="Allow menu actions (Disabled by default)")
+parser.add_argument("--allow-menu", action="store_true", help="Allow menu actions (kept for compatibility)")
+parser.add_argument("--block-menu", action="store_true", help="Block START/BACK/GUIDE menu actions")
 parser.add_argument("--port", type=int, default=5555, help="Port for model server")
 parser.add_argument("--screenshot-backend", choices=["auto", "dxcam", "pyautogui"], default="auto", help="Screenshot backend")
 parser.add_argument("--no-special-init", action="store_true", help="Skip game-specific startup button macro")
 parser.add_argument("--no-unstuck", action="store_true", help="Disable supervisor recovery skills")
 
 args = parser.parse_args()
+menu_allowed = not args.block_menu
 
 policy = ModelClient(port=args.port)
 policy.reset()
@@ -32,11 +34,10 @@ policy_info = policy.info()
 action_downsample_ratio = policy_info["action_downsample_ratio"]
 
 CKPT_NAME = Path(policy_info["ckpt_path"]).stem
-NO_MENU = not args.allow_menu
-if NO_MENU:
-    print("Menu actions blocked: START/BACK/GUIDE predictions will be ignored.")
+if not menu_allowed:
+    print("Ações de menu bloqueadas: previsões START/BACK/GUIDE serão ignoradas.")
 else:
-    print("WARNING: menu actions are allowed; the model may open pause/options menus.")
+    print("Ações de menu liberadas: previsões START/BACK/GUIDE podem chegar ao jogo.")
 
 PATH_DEBUG = PATH_REPO / "debug"
 PATH_DEBUG.mkdir(parents=True, exist_ok=True)
@@ -63,13 +64,13 @@ PATH_SUPERVISOR = PATH_OUT / f"{next_number:04d}_SUPERVISOR.json"
 
 supervisor = ObjectiveSupervisor(
     process_name=args.process,
-    allow_menu=args.allow_menu,
+    allow_menu=menu_allowed,
     enable_skills=not args.no_unstuck,
     log_path=PATH_SUPERVISOR,
 )
 print(f"Supervisor profile: {supervisor.profile.name} ({supervisor.profile.genre})")
 if args.no_unstuck:
-    print("Supervisor recovery skills disabled.")
+    print("Skills de recuperação do supervisor desativadas.")
 
 def preprocess_img(main_image):
     main_cv = cv2.cvtColor(np.array(main_image), cv2.COLOR_RGB2BGR)
@@ -119,7 +120,7 @@ try:
     )
 except ValueError as exc:
     print()
-    print(f"Nao consegui encontrar o jogo: {exc}")
+    print(f"Não consegui encontrar o jogo: {exc}")
     print("Abra o jogo no Windows e use o nome exato do processo .exe.")
     sys.exit(1)
 except Exception as exc:
@@ -130,7 +131,7 @@ except Exception as exc:
 # These games may require a menu/button nudge to initialize the controller.
 if args.process.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init:
     print(f"GamepadEnv ready for {args.process} at {env.env_fps} FPS")
-    input("Press enter to create a virtual controller and start rollouts...")
+    print("Executando macro automática de inicialização para este jogo...")
     for i in range(3):
         print(f"{3 - i}...")
         time.sleep(1)

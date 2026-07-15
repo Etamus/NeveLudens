@@ -1,65 +1,70 @@
-# NeveLudens - uso local
+# NeveLudens - guia rápido
 
-## Caminho principal
-
-Execute:
-
-```bat
-D:\NeveLudens\iniciar.bat
-```
-
-Tudo fica dentro do proprio projeto:
-
-- Ambiente Python: `D:\NeveLudens\.venv`
-- Cache do pip: `D:\NeveLudens\.cache\pip`
-- Cache Hugging Face/Transformers: `D:\NeveLudens\.cache\huggingface`
-- Cache Torch: `D:\NeveLudens\.cache\torch`
-- Checkpoint do modelo: `D:\NeveLudens\models\ng.pt`
-- Logs do servidor: `D:\NeveLudens\logs`
-- Videos, acoes e logs do supervisor: `D:\NeveLudens\out`
-
-## Como rodar
-
-1. Abra o jogo no Windows antes de iniciar o NeveLudens.
-2. Rode `D:\NeveLudens\iniciar.bat`.
-3. Escolha o processo do jogo pela lista ou digite o nome exato do `.exe`.
-4. Deixe `Permitir acoes de menu START/BACK/GUIDE?` como `N`, especialmente em jogos que abrem pause/options com facilidade.
-5. A captura usa `dxcam` primeiro e troca para `pyautogui` se ficar preta ou congelada por varios frames.
-6. Para `isaac-ng.exe` e `Cuphead.exe`, a macro especial de inicializacao roda automaticamente.
-7. A porta do servidor e `5555` por padrao; se estiver ocupada por outro programa, o launcher escolhe outra livre sem perguntar.
-8. Aguarde o servidor carregar o modelo.
-9. Mantenha a janela do jogo visivel e ativa.
-10. Para parar, volte para a janela do NeveLudens e pressione `Ctrl+C`.
-
-## O que o supervisor faz
-
-- Analisa o frame em paralelo, sem alterar a imagem enviada ao modelo.
-- Mantem memoria curta de movimento visual, tela escura, loading e repeticao de acoes.
-- Carrega um perfil do jogo quando o processo e conhecido.
-- Bloqueia botoes de menu quando voce nao permite menu.
-- Converte tokens digitais de mira para analogico direito em perfis que precisam disso.
-- Chama skills de espera, destravamento ou quebra de repeticao quando necessario.
-
-## Diagnostico de captura
+## Primeira instalação
 
 Execute:
 
 ```bat
-D:\NeveLudens\diagnosticar_captura.bat
+instalar.bat
 ```
 
-As imagens serao salvas em `D:\NeveLudens\debug`. A captura correta deve mostrar exatamente a janela do jogo.
+O CMD executa a instalação etapa por etapa. O instalador cria e usa apenas pastas locais do projeto:
+
+- `.venv`
+- `.cache`
+- `models`
+- `logs`
+- `out`
+- `debug`
+
+O `pip` não instala pacotes globalmente.
+
+## Rodar o agente
+
+1. Abra o jogo no Windows.
+2. Deixe a janela do jogo visível.
+3. Execute:
+
+```bat
+iniciar.bat
+```
+
+4. Selecione o processo do jogo na lista ou digite o nome exato do `.exe`.
+5. Deixe a captura em `Automática`, a menos que queira testar manualmente `dxcam` ou `pyautogui`.
+6. Clique em **Iniciar**.
+7. Para parar, clique em **Parar** no mesmo botão.
+
+Padrões atuais:
+
+- Porta do servidor: `5555`.
+- `START`, `BACK` e `GUIDE`: sempre liberados.
+- Captura: `dxcam` primeiro, `pyautogui` como fallback conservador.
+- Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
+
+## Diagnóstico de captura
+
+Na interface do `iniciar.bat`, selecione o jogo e clique em **Diagnosticar**.
+
+As imagens são salvas em:
+
+```bat
+D:\NeveLudens\debug
+```
+
+A captura correta deve mostrar exatamente a janela do jogo. Se a imagem estiver preta, congelada ou mostrando outra janela, esse é o primeiro ponto a corrigir.
 
 ## Logs importantes
 
-- `out\<modelo>\*_ACTIONS.json`: acoes finais enviadas ao jogo.
-- `out\<modelo>\*_SUPERVISOR.json`: percepcao, memoria, objetivo e skill usada.
-- `logs\server_*.log`: inicializacao e inferencia do servidor.
+- `logs\gui_run_*.log`: log espelho do iniciar.
+- `logs\server_*.log`: log do servidor local.
+- `out\<modelo>\*_ACTIONS.json`: ações enviadas ao jogo.
+- `out\<modelo>\*_SUPERVISOR.json`: decisões do supervisor.
+- `out\<modelo>\*_DEBUG.mp4`: vídeo de debug.
+- `out\<modelo>\*_CLEAN.mp4`: vídeo limpo.
 
-## Observacoes
+## Observações
 
-- O projeto exige CUDA no codigo atual; CPU nao e um caminho pratico.
-- O projeto nao inclui jogos.
-- O modelo ainda e reativo e nao garante jogar qualquer jogo do inicio ao fim.
-- O supervisor melhora estabilidade, mas nao substitui treinamento especifico.
-- Se o jogo nao for encontrado, confira o nome exato do processo no Gerenciador de Tarefas.
+- O projeto exige GPU NVIDIA com CUDA no estado atual.
+- O jogo precisa aceitar controle.
+- O modelo é generalista; ele pode jogar mal em jogos que exigem planejamento, leitura precisa de UI ou conhecimento específico.
+- O supervisor melhora estabilidade, mas não transforma automaticamente o modelo em especialista de cada jogo.
