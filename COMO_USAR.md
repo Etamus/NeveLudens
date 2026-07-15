@@ -8,6 +8,8 @@ Execute:
 instalar.bat
 ```
 
+No menu, escolha **Instalar ou atualizar o NeveLudens** e confirme. Se não houver Python 3.11/3.12, o instalador oferece instalar uma dessas versões via `winget`.
+
 O CMD executa a instalação etapa por etapa. O instalador cria e usa apenas pastas locais do projeto:
 
 - `.venv`

@@ -252,16 +252,20 @@ $xaml = @"
                     <TextBlock Text="NeveLudens" FontSize="15" FontWeight="SemiBold" Foreground="#111111" VerticalAlignment="Center"/>
                     <TextBlock Text="  ·  Iniciar" FontSize="13" Foreground="#71717A" VerticalAlignment="Center"/>
                 </StackPanel>
-                <Button x:Name="BtnClose" Grid.Column="1" Content="×" Style="{StaticResource WindowCloseBtn}" Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <Button x:Name="BtnMinimize" Content="−" Style="{StaticResource WindowCloseBtn}" Margin="0,0,2,0"/>
+                    <Button x:Name="BtnClose" Content="×" Style="{StaticResource WindowCloseBtn}"/>
+                </StackPanel>
             </Grid>
 
             <Grid Grid.Row="1" Margin="32,8,32,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="310"/>
+                    <ColumnDefinition Width="28"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Margin="0,0,18,0">
+                <StackPanel Grid.Column="0">
                     <TextBlock Text="Jogo" FontSize="22" FontWeight="SemiBold" Foreground="#111111"/>
                     <TextBlock Text="Escolha o processo e o modo de captura." FontSize="13" Foreground="#71717A" Margin="0,4,0,16"/>
 
@@ -305,14 +309,16 @@ $xaml = @"
                     </Border>
                 </StackPanel>
 
-                <Grid Grid.Column="1">
+                <Border Grid.Column="1" Width="1" Background="#E4E4E7" Margin="0,4,0,0"/>
+
+                <Grid Grid.Column="2">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0" Margin="0,0,0,16">
                         <TextBlock Text="Execução" FontSize="22" FontWeight="SemiBold" Foreground="#111111"/>
-                        <TextBlock Text="Acompanhe o servidor, o agente e o diagnóstico." FontSize="13" Foreground="#71717A" Margin="0,4,0,0"/>
+                        <TextBlock Text="Acompanhe o log de execução." FontSize="13" Foreground="#71717A" Margin="0,4,0,0"/>
                     </StackPanel>
 
                     <Border Grid.Row="1" Background="#0A0A0A" CornerRadius="10" Padding="14,12">
@@ -338,6 +344,7 @@ $reader = New-Object System.Xml.XmlNodeReader ([xml]$xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
 $TitleBar = $window.FindName("TitleBar")
+$BtnMinimize = $window.FindName("BtnMinimize")
 $BtnClose = $window.FindName("BtnClose")
 $ProcessCombo = $window.FindName("ProcessCombo")
 $ManualProcessBox = $window.FindName("ManualProcessBox")
@@ -587,6 +594,7 @@ $TitleBar.Add_MouseLeftButtonDown({
 })
 
 $BtnClose.Add_Click({ $window.Close() })
+$BtnMinimize.Add_Click({ $window.WindowState = "Minimized" })
 $RefreshButton.Add_Click({ Refresh-Processes })
 
 $ProcessCombo.Add_SelectionChanged({

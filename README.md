@@ -1,8 +1,6 @@
-<img width="1400" height="350" alt="NeveLudens" src="https://github.com/user-attachments/assets/06f5da66-daf1-4fa6-be5b-17431e96ae4a" />
+<img width="1400" height="350" alt="Neveludens (1)" src="https://github.com/user-attachments/assets/0d91ec71-2ad6-487c-b881-c7572b73bb98" />
 
 ---
-
-# NeveLudens
 
 NeveLudens é uma plataforma local de agente visual para jogos. Ele observa a janela do jogo, interpreta frames com um modelo visual, transforma decisões em comandos de controle virtual e aplica uma camada de supervisão para tornar a execução mais estável.
 
@@ -60,6 +58,10 @@ Padrões atuais:
 
 Roda um instalador CMD normal. Ele prepara o projeto para uso local:
 
+- Mostra um menu antes de iniciar.
+- Permite verificar o ambiente atual.
+- Pede confirmação antes de instalar ou atualizar.
+- Oferece instalar Python 3.11/3.12 via `winget` quando nenhum Python compatível é encontrado.
 - Cria ou reutiliza `.venv` dentro do projeto.
 - Instala dependências Python dentro da `.venv`.
 - Mantém caches em `.cache`.
