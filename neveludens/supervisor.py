@@ -33,14 +33,16 @@ class ObjectiveSupervisor:
         self,
         process_name: str,
         allow_menu: bool,
+        enable_recovery: bool = True,
         enable_skills: bool = True,
         log_path: Path | None = None,
     ):
+        self.enable_recovery = enable_recovery
         self.profile: GameProfile = get_profile(process_name)
         self.allow_menu = allow_menu
         self.perception = PerceptionAnalyzer()
-        self.memory = TemporalMemory()
-        self.skills = SkillLibrary(enabled=enable_skills)
+        self.memory = TemporalMemory() if enable_recovery else None
+        self.skills = SkillLibrary(enabled=enable_skills and enable_recovery)
         self.log_path = log_path
         self.latest_perception: PerceptionState | None = None
         if self.log_path is not None:
@@ -48,7 +50,8 @@ class ObjectiveSupervisor:
 
     def observe(self, image: Image.Image, step: int) -> PerceptionState:
         state = self.perception.analyze(image, step)
-        self.memory.update_perception(state)
+        if self.memory is not None:
+            self.memory.update_perception(state)
         self.latest_perception = state
         return state
 
@@ -71,20 +74,25 @@ class ObjectiveSupervisor:
 
         apply_deadzone(actions, self.profile)
 
-        skill_decision = self.skills.apply_first(
-            actions,
-            self.latest_perception,
-            self.memory,
-            self.profile,
-            step,
-        )
+        skill_decision = None
+        if self.memory is not None:
+            skill_decision = self.skills.apply_first(
+                actions,
+                self.latest_perception,
+                self.memory,
+                self.profile,
+                step,
+            )
         skill_name = None
         if skill_decision is not None:
             skill_name = skill_decision.name
             objective = skill_decision.name
             reasons.append(f"{skill_decision.name}: {skill_decision.reason}")
 
-        self.memory.update_actions(actions)
+        memory_snapshot = {}
+        if self.memory is not None:
+            self.memory.update_actions(actions)
+            memory_snapshot = self.memory.snapshot()
 
         decision = SupervisorDecision(
             step=step,
@@ -93,7 +101,7 @@ class ObjectiveSupervisor:
             skill=skill_name,
             reasons=reasons,
             perception=self.latest_perception,
-            memory=self.memory.snapshot(),
+            memory=memory_snapshot,
         )
         self._log(decision)
         return decision

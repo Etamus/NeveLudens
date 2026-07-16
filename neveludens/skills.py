@@ -25,7 +25,6 @@ REPETITION_BREAK_DIRECTIONS = [
     (-24000, 0),
 ]
 
-
 @dataclass
 class SkillDecision:
     name: str

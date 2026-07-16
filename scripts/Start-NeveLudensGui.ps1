@@ -16,6 +16,11 @@ $script:ActiveProcess = $null
 $script:ActiveIsAgent = $false
 $script:RunLogPath = $null
 $script:LogReadPosition = 0
+$script:StopFilePath = $null
+$script:StopRequestedAt = $null
+$script:ForcedStopIssued = $false
+$script:CloseAfterStop = $false
+$script:ForceStopAfterSeconds = 30
 
 New-Item -ItemType Directory -Force -Path $LogsDir, $OutDir, $DebugDir | Out-Null
 Set-Location $Repo
@@ -111,7 +116,7 @@ $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="NeveLudens - Iniciar"
-        Width="840" Height="700"
+        Width="1040" Height="760"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -290,45 +295,54 @@ $xaml = @"
             </Grid>
 
             <Grid Grid.Row="1" Margin="32,8,32,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="310"/>
-                    <ColumnDefinition Width="28"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="18"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-                <StackPanel Grid.Column="0">
+                <StackPanel Grid.Row="0">
                     <TextBlock Text="Jogo" FontSize="22" FontWeight="SemiBold" Foreground="#111111"/>
-                    <TextBlock Text="Escolha o processo e o modo de captura." FontSize="13" Foreground="#71717A" Margin="0,4,0,16"/>
+                    <TextBlock Text="Escolha o processo e configure a execução." FontSize="13" Foreground="#71717A" Margin="0,4,0,16"/>
 
                     <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="16"/>
                                 <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="16"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
 
-                            <TextBlock Grid.Row="0" Text="Janela detectada:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                            <ComboBox Grid.Row="1" x:Name="ProcessCombo" Margin="0,0,0,12"
-                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding Display}" Width="224" TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding FullDisplay}"/>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
+                            <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,12,0">
+                                <TextBlock Text="Janela detectada:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="ProcessCombo" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Display}" Width="330" TextTrimming="CharacterEllipsis"
+                                                       ToolTip="{Binding FullDisplay}"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
 
-                            <TextBlock Grid.Row="2" Text="Processo do jogo (.exe):" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                            <TextBox Grid.Row="3" x:Name="ManualProcessBox" Margin="0,0,0,12"/>
+                            <StackPanel Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="2" Margin="0,0,12,0">
+                                <TextBlock Text="Processo do jogo (.exe):" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <TextBox x:Name="ManualProcessBox"/>
+                            </StackPanel>
 
-                            <StackPanel Grid.Row="4">
+                            <Button Grid.Row="0" Grid.Column="4" x:Name="RefreshButton" Content="Atualizar" Style="{StaticResource GhostBtn}"
+                                    VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
+
+                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,12,0">
                                 <TextBlock Text="Captura:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="BackendCombo">
                                     <ComboBoxItem Content="Automático" Tag="auto" IsSelected="True"/>
@@ -337,36 +351,49 @@ $xaml = @"
                                 </ComboBox>
                             </StackPanel>
 
-                            <StackPanel Grid.Row="5" Margin="0,12,0,0">
-                                <TextBlock Text="Modo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,12,0">
+                                <TextBlock Text="Modo de captura:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="RuntimeModeCombo">
                                     <ComboBoxItem Content="Precisão" Tag="precision" IsSelected="True"/>
                                     <ComboBoxItem Content="Tempo real" Tag="realtime"/>
                                 </ComboBox>
                             </StackPanel>
 
-                            <StackPanel Grid.Row="6" Margin="0,12,0,0">
-                                <CheckBox x:Name="MenuActionsCheck" Content="Permitir ações de menu" IsChecked="True"
-                                          Style="{StaticResource ToggleCheck}"/>
-                            </StackPanel>
-
-                            <StackPanel Grid.Row="7" Margin="0,12,0,0">
-                                <TextBlock Text="Saídas:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                            <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,12,0">
+                                <TextBlock Text="Saída de depuração:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="OutputModeCombo">
                                     <ComboBoxItem Content="Normal" Tag="normal" IsSelected="True"/>
                                     <ComboBoxItem Content="Debug" Tag="debug"/>
                                 </ComboBox>
                             </StackPanel>
 
-                            <Button Grid.Row="8" x:Name="RefreshButton" Content="Atualizar" Style="{StaticResource GhostBtn}"
-                                    HorizontalAlignment="Right" Margin="0,18,0,0"/>
+                            <StackPanel Grid.Row="2" Grid.Column="3" Margin="0,0,12,0">
+                                <TextBlock Text="Modo de jogo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="GameModeCombo">
+                                    <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
+                                    <ComboBoxItem Content="Jogo de luta" Tag="fighting"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="4" Grid.Column="0" Margin="0,0,12,0">
+                                <TextBlock Text="Jogador do agente:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="AgentSlotCombo">
+                                    <ComboBoxItem Content="Automático" Tag="auto" IsSelected="True"/>
+                                    <ComboBoxItem Content="Player 2" Tag="player2"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4" Orientation="Horizontal" VerticalAlignment="Center">
+                                <CheckBox x:Name="SmartRecoveryCheck" Content="Recuperação inteligente" IsChecked="True"
+                                          Style="{StaticResource ToggleCheck}" Margin="0,0,28,0"/>
+                                <CheckBox x:Name="MenuActionsCheck" Content="Permitir acesso de menus" IsChecked="True"
+                                          Style="{StaticResource ToggleCheck}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </StackPanel>
 
-                <Border Grid.Column="1" Width="1" Background="#E4E4E7" Margin="0,4,0,0"/>
-
-                <Grid Grid.Column="2">
+                <Grid Grid.Row="2">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -407,6 +434,9 @@ $BackendCombo = $window.FindName("BackendCombo")
 $RuntimeModeCombo = $window.FindName("RuntimeModeCombo")
 $MenuActionsCheck = $window.FindName("MenuActionsCheck")
 $OutputModeCombo = $window.FindName("OutputModeCombo")
+$GameModeCombo = $window.FindName("GameModeCombo")
+$AgentSlotCombo = $window.FindName("AgentSlotCombo")
+$SmartRecoveryCheck = $window.FindName("SmartRecoveryCheck")
 $RefreshButton = $window.FindName("RefreshButton")
 $StartButton = $window.FindName("StartButton")
 $DiagnoseButton = $window.FindName("DiagnoseButton")
@@ -546,8 +576,29 @@ function Get-OutputMode {
     return "normal"
 }
 
+function Get-GameMode {
+    $selected = $GameModeCombo.SelectedItem
+    if ($selected -and $selected.Tag) {
+        return [string]$selected.Tag
+    }
+    return "default"
+}
+
+function Get-AgentSlot {
+    $selected = $AgentSlotCombo.SelectedItem
+    if ($selected -and $selected.Tag) {
+        return [string]$selected.Tag
+    }
+    return "auto"
+}
+
+function Get-SmartRecoveryEnabled {
+    return [bool]$SmartRecoveryCheck.IsChecked
+}
+
 function Set-RunButtonState {
     param([bool]$Running)
+    $StartButton.IsEnabled = $true
     if ($Running) {
         $StartButton.Content = "Parar"
         $StartButton.Style = $window.FindResource("DangerBtn")
@@ -561,10 +612,23 @@ function Set-RunButtonState {
 
 function Stop-Agent {
     if ($script:AgentProcess -and -not $script:AgentProcess.HasExited) {
-        Append-Log "Parada solicitada pelo usuário."
-        Stop-ProcessTree -RootProcessId $script:AgentProcess.Id
+        if ($script:StopRequestedAt) {
+            return
+        }
+        Append-Log "Parada solicitada. Aguardando limpeza segura do controle e do modo de captura..."
+        if ($script:StopFilePath) {
+            try {
+                Set-Content -LiteralPath $script:StopFilePath -Value ("stop requested at {0}" -f (Get-Date -Format "o")) -Encoding UTF8
+            } catch {
+                Append-Log ("Não consegui criar o sinal de parada: {0}" -f $_.Exception.Message)
+            }
+        }
+        $script:StopRequestedAt = Get-Date
+        $script:ForcedStopIssued = $false
+        $StartButton.Content = "Parando..."
+        $StartButton.IsEnabled = $false
+        $DiagnoseButton.IsEnabled = $false
     }
-    Set-RunButtonState -Running $false
 }
 
 function Start-LoggedPython {
@@ -592,7 +656,16 @@ function Start-LoggedPython {
         return
     }
 
-    $script:RunLogPath = Join-Path $LogsDir ("gui_run_{0}.log" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $script:RunLogPath = Join-Path $LogsDir ("gui_run_{0}.log" -f $stamp)
+    $script:StopFilePath = $null
+    $script:StopRequestedAt = $null
+    $script:ForcedStopIssued = $false
+    if ($IsAgent) {
+        $script:StopFilePath = Join-Path $LogsDir ("gui_stop_{0}.flag" -f $stamp)
+        Remove-Item -LiteralPath $script:StopFilePath -Force -ErrorAction SilentlyContinue
+        $Arguments = @($Arguments) + @("--stop-file", $script:StopFilePath)
+    }
     $script:LogReadPosition = 0
     Set-Content -LiteralPath $script:RunLogPath -Value @() -Encoding UTF8
     Append-Log $StartedMessage
@@ -647,18 +720,36 @@ function Start-LoggedPython {
 $script:LogTimer.Add_Tick({
     try {
         Read-NewLogLines
+        if ($script:ActiveProcess -and -not $script:ActiveProcess.HasExited -and $script:StopRequestedAt -and -not $script:ForcedStopIssued) {
+            $elapsed = ((Get-Date) - $script:StopRequestedAt).TotalSeconds
+            if ($elapsed -ge $script:ForceStopAfterSeconds) {
+                Append-Log ("Parada segura excedeu {0}s. Encerrando processo à força como último recurso." -f $script:ForceStopAfterSeconds)
+                $script:ForcedStopIssued = $true
+                Stop-ProcessTree -RootProcessId $script:ActiveProcess.Id
+            }
+        }
         if ($script:ActiveProcess -and $script:ActiveProcess.HasExited) {
             Read-NewLogLines
             $exitCode = $script:ActiveProcess.ExitCode
             $wasAgent = $script:ActiveIsAgent
             Append-Log ("Processo encerrado com código {0}" -f $exitCode)
             $script:LogTimer.Stop()
+            if ($script:StopFilePath) {
+                Remove-Item -LiteralPath $script:StopFilePath -Force -ErrorAction SilentlyContinue
+            }
             $script:ActiveProcess = $null
             $script:ActiveIsAgent = $false
             $script:AgentProcess = $null
+            $script:StopFilePath = $null
+            $script:StopRequestedAt = $null
+            $script:ForcedStopIssued = $false
             Set-RunButtonState -Running $false
             if (-not $wasAgent) {
                 $DiagnoseButton.IsEnabled = $true
+            }
+            if ($script:CloseAfterStop) {
+                $script:CloseAfterStop = $false
+                $window.Close()
             }
         }
     } catch {}
@@ -699,9 +790,16 @@ $StartButton.Add_Click({
             "--screenshot-backend", (Get-BackendName),
             "--runtime-mode", (Get-RuntimeMode),
             "--output-mode", (Get-OutputMode),
+            "--game-mode", (Get-GameMode),
+            "--agent-slot", (Get-AgentSlot),
             "--port", "5555",
             "--non-interactive"
         )
+        if (Get-SmartRecoveryEnabled) {
+            $launchArgs += "--smart-recovery"
+        } else {
+            $launchArgs += "--no-smart-recovery"
+        }
         if (Get-AllowMenuActions) {
             $launchArgs += "--allow-menu"
         } else {
@@ -733,8 +831,11 @@ $DiagnoseButton.Add_Click({
 })
 
 $window.Add_Closing({
-    if ($script:ActiveProcess -and -not $script:ActiveProcess.HasExited) {
-        Stop-ProcessTree -RootProcessId $script:ActiveProcess.Id
+    param($sender, $eventArgs)
+    if ($script:ActiveProcess -and -not $script:ActiveProcess.HasExited -and -not $script:CloseAfterStop) {
+        $eventArgs.Cancel = $true
+        $script:CloseAfterStop = $true
+        Stop-Agent
     }
 })
 

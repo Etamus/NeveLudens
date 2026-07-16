@@ -11,6 +11,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from neveludens.stop_control import StopRequested, normalize_stop_file, stop_requested
+
 
 REPO = Path(__file__).resolve().parents[1]
 VENV_PYTHON = REPO / ".venv" / "Scripts" / "python.exe"
@@ -43,6 +45,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="normal",
         help="'normal' disables PNG/video/session artifacts. 'debug' keeps the full current recording outputs.",
     )
+    parser.add_argument(
+        "--game-mode",
+        choices=["default", "fighting"],
+        default="default",
+        help="Optional game-specific mode. Default does not alter model actions.",
+    )
+    parser.add_argument(
+        "--agent-slot",
+        choices=["auto", "player2"],
+        default="auto",
+        help="Controller slot preference. 'auto' keeps current behavior; 'player2' tries to make the agent the second player.",
+    )
+    recovery_group = parser.add_mutually_exclusive_group()
+    recovery_group.add_argument(
+        "--smart-recovery",
+        dest="smart_recovery",
+        action="store_true",
+        default=True,
+        help="Enable temporal memory and anti-loop recovery.",
+    )
+    recovery_group.add_argument(
+        "--no-smart-recovery",
+        dest="smart_recovery",
+        action="store_false",
+        help="Disable temporal memory and anti-loop recovery.",
+    )
     menu_group = parser.add_mutually_exclusive_group()
     menu_group.add_argument(
         "--allow-menu",
@@ -59,6 +87,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="Local inference server port")
     parser.add_argument("--no-special-init", action="store_true", help="Skip Isaac/Cuphead startup macro")
+    parser.add_argument(
+        "--stop-file",
+        default="",
+        help="Internal file used by the GUI to request a safe stop.",
+    )
     parser.add_argument(
         "--non-interactive",
         action="store_true",
@@ -108,7 +141,7 @@ def console_safe(text: str) -> str:
     return text.encode(encoding, errors="replace").decode(encoding, errors="replace")
 
 
-def preflight() -> None:
+def preflight(agent_slot: str = "auto") -> None:
     if not VENV_PYTHON.exists():
         raise RuntimeError("Ambiente .venv não encontrado. Rode iniciar.bat novamente.")
 
@@ -123,13 +156,17 @@ def preflight() -> None:
             "PyTorch não encontrou CUDA. O NeveLudens atual exige GPU NVIDIA com CUDA."
         )
 
-    # Create and release one virtual controller to catch driver problems early.
-    gamepad = vg.VX360Gamepad()
-    gamepad.reset()
-    gamepad.update()
+    if agent_slot == "player2":
+        print("Controle virtual: validacao adiada para preservar a ordem de Player 2")
+    else:
+        # Create and release one virtual controller to catch driver problems early.
+        gamepad = vg.VX360Gamepad()
+        gamepad.reset()
+        gamepad.update()
 
     print(f"CUDA OK: {torch.cuda.get_device_name(0)}")
-    print("Controle virtual OK")
+    if agent_slot != "player2":
+        print("Controle virtual OK")
     print()
 
 
@@ -293,10 +330,19 @@ def start_server(port: int, env: dict[str, str]) -> tuple[subprocess.Popen, Path
     return proc, log_path
 
 
-def wait_for_server(proc: subprocess.Popen, port: int, log_path: Path, timeout_s: int = 300) -> dict:
+def wait_for_server(
+    proc: subprocess.Popen,
+    port: int,
+    log_path: Path,
+    timeout_s: int = 300,
+    stop_file: Path | None = None,
+) -> dict:
     started = time.time()
     last_notice = 0.0
     while time.time() - started < timeout_s:
+        if stop_requested(stop_file):
+            stop_server(proc)
+            raise StopRequested("Stop requested while waiting for server")
         if proc.poll() is not None:
             raise RuntimeError(
                 "Servidor encerrou antes de ficar pronto.\n\n"
@@ -329,6 +375,36 @@ def stop_server(proc: subprocess.Popen | None) -> None:
         proc.kill()
 
 
+def wait_for_process_or_stop(
+    proc: subprocess.Popen,
+    stop_file: Path | None,
+    graceful_timeout_s: float = 30.0,
+) -> int:
+    stop_notice_shown = False
+    stop_started = 0.0
+
+    while True:
+        exit_code = proc.poll()
+        if exit_code is not None:
+            return exit_code
+
+        if stop_requested(stop_file):
+            if not stop_notice_shown:
+                print("Parada solicitada. Aguardando limpeza segura do ambiente...")
+                stop_notice_shown = True
+                stop_started = time.time()
+            elif time.time() - stop_started > graceful_timeout_s:
+                print("Tempo de parada segura excedido. Encerrando processo do jogador.")
+                proc.terminate()
+                try:
+                    return proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    return proc.wait(timeout=5)
+
+        time.sleep(0.25)
+
+
 def run_player(
     process_name: str,
     port: int,
@@ -336,7 +412,11 @@ def run_player(
     screenshot_backend: str,
     runtime_mode: str,
     output_mode: str,
+    game_mode: str,
+    agent_slot: str,
+    smart_recovery: bool,
     special_init: bool,
+    stop_file: Path | None,
     env: dict[str, str],
 ) -> int:
     cmd = [
@@ -352,7 +432,17 @@ def run_player(
         runtime_mode,
         "--output-mode",
         output_mode,
+        "--game-mode",
+        game_mode,
+        "--agent-slot",
+        agent_slot,
     ]
+    if stop_file is not None:
+        cmd.extend(["--stop-file", str(stop_file)])
+    if smart_recovery:
+        cmd.append("--smart-recovery")
+    else:
+        cmd.append("--no-smart-recovery")
     if allow_menu:
         cmd.append("--allow-menu")
     else:
@@ -361,19 +451,35 @@ def run_player(
         cmd.append("--no-special-init")
     print()
     print("Servidor pronto. Iniciando controle do jogo.")
-    print("Para parar, pressione Ctrl+C nesta janela.")
+    print("Para parar, use o botao Parar da interface ou pressione Ctrl+C nesta janela.")
     print()
-    return subprocess.call(cmd, cwd=REPO, env=env)
+    flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    proc = subprocess.Popen(cmd, cwd=REPO, env=env, creationflags=flags)
+    try:
+        return wait_for_process_or_stop(proc, stop_file)
+    except StopRequested:
+        print()
+        print("Parada solicitada pelo usuario.")
+        return 130
+    except KeyboardInterrupt:
+        if stop_file is not None:
+            stop_file.parent.mkdir(parents=True, exist_ok=True)
+            stop_file.write_text("keyboard interrupt\n", encoding="utf-8")
+        raise
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     env = local_env()
     os.environ.update(env)
+    stop_file = normalize_stop_file(args.stop_file)
     header()
 
+    if stop_requested(stop_file):
+        raise StopRequested("Stop requested before launcher preflight")
+
     try:
-        preflight()
+        preflight(args.agent_slot)
     except Exception as exc:
         print(f"Falha na verificacao inicial: {exc}")
         return 1
@@ -393,6 +499,9 @@ def main(argv: list[str] | None = None) -> int:
     screenshot_backend = args.screenshot_backend
     runtime_mode = args.runtime_mode
     output_mode = args.output_mode
+    game_mode = args.game_mode
+    agent_slot = args.agent_slot
+    smart_recovery = args.smart_recovery
     special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init
     if special_init:
         print("Macro especial de inicialização ativada para este jogo.")
@@ -401,8 +510,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("Ações START/BACK/GUIDE: bloqueadas")
     print(f"Captura: {screenshot_backend}")
-    print(f"Modo de execucao: {runtime_mode}")
+    print(f"Modo de captura: {runtime_mode}")
     print(f"Saidas: {output_mode}")
+    print(f"Modo de jogo: {game_mode}")
+    print(f"Jogador do agente: {agent_slot}")
+    print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
     print(f"Porta do servidor: {args.port}")
     port = args.port
 
@@ -417,17 +529,20 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Porta {port} está ocupada. Vou usar {new_port}.")
             port = new_port
             server_proc, log_path = start_server(port, env)
-            info = wait_for_server(server_proc, port, log_path)
+            info = wait_for_server(server_proc, port, log_path, stop_file=stop_file)
     else:
         server_proc, log_path = start_server(port, env)
-        info = wait_for_server(server_proc, port, log_path)
+        info = wait_for_server(server_proc, port, log_path, stop_file=stop_file)
 
     print(f"Modelo: {Path(info.get('ckpt_path', str(CHECKPOINT))).name}")
     print(f"Jogo/processo: {process_name}")
     print(f"Porta: {port}")
     print("Captura: dxcam com fallback conservador para pyautogui")
-    print(f"Modo: {runtime_mode}")
+    print(f"Modo de captura: {runtime_mode}")
     print(f"Saidas: {output_mode}")
+    print(f"Modo de jogo: {game_mode}")
+    print(f"Jogador do agente: {agent_slot}")
+    print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
     print(f"Ações de menu: {'liberadas' if allow_menu else 'bloqueadas'}")
 
     config.update({
@@ -436,13 +551,29 @@ def main(argv: list[str] | None = None) -> int:
         "screenshot_backend": screenshot_backend,
         "runtime_mode": runtime_mode,
         "output_mode": output_mode,
+        "game_mode": game_mode,
+        "agent_slot": agent_slot,
+        "smart_recovery": smart_recovery,
         "special_init": special_init,
         "port": port,
     })
     save_config(config)
 
     try:
-        return run_player(process_name, port, allow_menu, screenshot_backend, runtime_mode, output_mode, special_init, env)
+        return run_player(
+            process_name,
+            port,
+            allow_menu,
+            screenshot_backend,
+            runtime_mode,
+            output_mode,
+            game_mode,
+            agent_slot,
+            smart_recovery,
+            special_init,
+            stop_file,
+            env,
+        )
     except KeyboardInterrupt:
         print()
         print("Interrompido pelo usuário.")
@@ -452,4 +583,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except StopRequested:
+        print()
+        print("Parada solicitada pelo usuario.")
+        sys.exit(130)

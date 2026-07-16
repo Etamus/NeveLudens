@@ -1,3 +1,4 @@
+import ctypes
 import time
 import platform
 
@@ -19,6 +20,51 @@ import win32process
 import win32gui
 import win32api
 import win32con
+
+
+def active_xinput_slots():
+    """
+    Return active XInput indexes without adding dependencies.
+
+    Windows/game APIs decide player order. This gives the Player 2 mode a
+    conservative way to know whether a real controller already occupies P1.
+    """
+    xinput = None
+    for dll_name in ("xinput1_4", "xinput9_1_0", "xinput1_3"):
+        try:
+            xinput = ctypes.windll.LoadLibrary(dll_name)
+            break
+        except OSError:
+            continue
+    if xinput is None:
+        return []
+
+    class XINPUT_GAMEPAD(ctypes.Structure):
+        _fields_ = [
+            ("wButtons", ctypes.c_ushort),
+            ("bLeftTrigger", ctypes.c_ubyte),
+            ("bRightTrigger", ctypes.c_ubyte),
+            ("sThumbLX", ctypes.c_short),
+            ("sThumbLY", ctypes.c_short),
+            ("sThumbRX", ctypes.c_short),
+            ("sThumbRY", ctypes.c_short),
+        ]
+
+    class XINPUT_STATE(ctypes.Structure):
+        _fields_ = [
+            ("dwPacketNumber", ctypes.c_ulong),
+            ("Gamepad", XINPUT_GAMEPAD),
+        ]
+
+    xinput.XInputGetState.argtypes = [ctypes.c_uint, ctypes.POINTER(XINPUT_STATE)]
+    xinput.XInputGetState.restype = ctypes.c_uint
+
+    active = []
+    for index in range(4):
+        state = XINPUT_STATE()
+        if xinput.XInputGetState(index, ctypes.byref(state)) == 0:
+            active.append(index)
+    return active
 
 
 def get_process_info(process_name):
@@ -163,21 +209,29 @@ PS4_MAPPING = {
 
 
 class GamepadEmulator:
-    def __init__(self, controller_type="xbox", system="windows"):
+    def __init__(self, controller_type="xbox", system="windows", agent_slot="auto"):
         """
         Initialize the GamepadEmulator with a specific controller type and system.
 
         Parameters:
         controller_type (str): The type of controller to emulate ("xbox" or "ps4").
         system (str): The operating system to use, which affects joystick value handling.
+        agent_slot (str): "auto" keeps the original behavior. "player2" tries to
+                          make the agent the second controller.
         """
         self.controller_type = controller_type
         self.system = system
+        self.agent_slot = agent_slot
+        self.slot_guard = None
+
+        if agent_slot == "player2":
+            self._prepare_player2_slot()
+
+        self.gamepad = self._create_virtual_gamepad()
+
         if controller_type == "xbox":
-            self.gamepad = vg.VX360Gamepad()
             self.mapping = XBOX_MAPPING
         elif controller_type == "ps4":
-            self.gamepad = vg.VDS4Gamepad()
             self.mapping = PS4_MAPPING
         else:
             raise ValueError("Unsupported controller type")
@@ -187,6 +241,35 @@ class GamepadEmulator:
         self.left_joystick_y: int = 0
         self.right_joystick_x: int = 0
         self.right_joystick_y: int = 0
+
+    def _create_virtual_gamepad(self):
+        if self.controller_type == "xbox":
+            return vg.VX360Gamepad()
+        if self.controller_type == "ps4":
+            return vg.VDS4Gamepad()
+        raise ValueError("Unsupported controller type")
+
+    def _prepare_player2_slot(self):
+        print("Modo Player 2: aguardando o jogador humano assumir o Player 1...")
+        time.sleep(5.0)
+
+        active_slots = active_xinput_slots() if self.controller_type == "xbox" else []
+        if 0 in active_slots:
+            active_players = ", ".join(f"Player {slot + 1}" for slot in active_slots)
+            print(f"Modo Player 2: controles XInput ja ativos: {active_players}.")
+            if 1 in active_slots:
+                print("Modo Player 2: o Player 2 ja parece ocupado; a IA pode cair em outro slot.")
+            else:
+                print("Modo Player 2: Player 1 ocupado, criando a IA no proximo slot disponivel.")
+            return
+
+        print("Modo Player 2: nenhum controle XInput ocupando o Player 1 foi detectado.")
+        print("Modo Player 2: criando controle reserva parado para ocupar o Player 1.")
+        self.slot_guard = self._create_virtual_gamepad()
+        self.slot_guard.reset()
+        self.slot_guard.update()
+        time.sleep(0.5)
+        print("Modo Player 2: criando o controle ativo da IA como proximo jogador.")
 
     def step(self, action):
         """
@@ -338,6 +421,19 @@ class GamepadEmulator:
         self.gamepad.reset()
         self.gamepad.update()
 
+    def close(self):
+        """
+        Reset virtual controllers before the process exits.
+        """
+        for gamepad in (getattr(self, "gamepad", None), getattr(self, "slot_guard", None)):
+            if gamepad is None:
+                continue
+            try:
+                gamepad.reset()
+                gamepad.update()
+            except Exception:
+                pass
+
 
 class PyautoguiScreenshotBackend:
 
@@ -480,6 +576,7 @@ class GamepadEnv(Env):
             async_mode=True,
             screenshot_backend="auto",
             runtime_mode="precision",
+            agent_slot="auto",
     ):
         super().__init__()
 
@@ -489,6 +586,7 @@ class GamepadEnv(Env):
         assert controller_type in ["xbox", "ps4"], "Platform must be either 'xbox' or 'ps4'"
         assert screenshot_backend in ["auto", "pyautogui", "dxcam"], "Screenshot backend must be 'auto', 'pyautogui', or 'dxcam'"
         assert runtime_mode in ["precision", "realtime"], "Runtime mode must be 'precision' or 'realtime'"
+        assert agent_slot in ["auto", "player2"], "Agent slot must be 'auto' or 'player2'"
 
         self.game = game
         self.image_height = int(image_height)
@@ -498,8 +596,13 @@ class GamepadEnv(Env):
         self.step_duration = self.calculate_step_duration()
         self.async_mode = async_mode
         self.runtime_mode = runtime_mode
+        self._closed = False
 
-        self.gamepad_emulator = GamepadEmulator(controller_type=controller_type, system=os_name)
+        self.gamepad_emulator = GamepadEmulator(
+            controller_type=controller_type,
+            system=os_name,
+            agent_slot=agent_slot,
+        )
         proc_info = get_process_info(game)
 
         self.game_pid = proc_info["pid"]
@@ -669,8 +772,24 @@ class GamepadEnv(Env):
         """
         Close the environment and release any resources.
         """
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
+        if hasattr(self, "gamepad_emulator"):
+            try:
+                self.gamepad_emulator.close()
+            except Exception as exc:
+                print(f"Failed to reset virtual gamepad during close: {exc}")
+        if getattr(self, "speedhack_client", None) is not None:
+            try:
+                self.speedhack_client.set_speed(1.0)
+            except Exception as exc:
+                print(f"Failed to restore game speed during close: {exc}")
         if hasattr(self, "screenshot_backend"):
-            self.screenshot_backend.close()
+            try:
+                self.screenshot_backend.close()
+            except Exception as exc:
+                print(f"Failed to close screenshot backend: {exc}")
 
     def render(self):
         """

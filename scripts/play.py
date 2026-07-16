@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import json
+import atexit
 from pathlib import Path
 from collections import OrderedDict
 from contextlib import nullcontext
@@ -15,6 +16,8 @@ from neveludens.shared import BUTTON_ACTION_TOKENS, PATH_REPO
 from neveludens.inference_viz import create_viz, VideoRecorder
 from neveludens.inference_client import ModelClient
 from neveludens.supervisor import ObjectiveSupervisor
+from neveludens.fighting import FightingAssist
+from neveludens.stop_control import normalize_stop_file, raise_if_stop_requested
 
 import argparse
 parser = argparse.ArgumentParser(description="VLM Inference")
@@ -25,19 +28,57 @@ parser.add_argument("--port", type=int, default=5555, help="Port for model serve
 parser.add_argument("--screenshot-backend", choices=["auto", "dxcam", "pyautogui"], default="auto", help="Screenshot backend")
 parser.add_argument("--runtime-mode", choices=["precision", "realtime"], default="precision", help="Runtime mode")
 parser.add_argument("--output-mode", choices=["normal", "debug"], default="normal", help="Output mode")
+parser.add_argument("--game-mode", choices=["default", "fighting"], default="default", help="Game-specific optional mode")
+parser.add_argument("--agent-slot", choices=["auto", "player2"], default="auto", help="Agent controller slot preference")
+recovery_group = parser.add_mutually_exclusive_group()
+recovery_group.add_argument("--smart-recovery", dest="smart_recovery", action="store_true", default=True, help="Enable temporal memory and anti-loop recovery")
+recovery_group.add_argument("--no-smart-recovery", dest="smart_recovery", action="store_false", help="Disable temporal memory and anti-loop recovery")
 parser.add_argument("--no-special-init", action="store_true", help="Skip game-specific startup button macro")
-parser.add_argument("--no-unstuck", action="store_true", help="Disable supervisor recovery skills")
+parser.add_argument("--stop-file", default="", help="Internal file used by the GUI to request a safe stop")
 
 args = parser.parse_args()
+stop_file = normalize_stop_file(args.stop_file)
 menu_allowed = not args.block_menu
 
-policy = ModelClient(port=args.port)
+env = None
+_cleanup_done = False
+
+
+def check_stop():
+    raise_if_stop_requested(stop_file)
+
+
+def cleanup_environment():
+    global env, _cleanup_done
+    if _cleanup_done:
+        return
+    _cleanup_done = True
+    if env is None:
+        return
+    try:
+        env.unpause()
+    except Exception as exc:
+        print(f"Falha ao devolver velocidade normal ao jogo: {exc}")
+    try:
+        env.close()
+    except Exception as exc:
+        print(f"Falha ao fechar ambiente do jogo: {exc}")
+
+
+atexit.register(cleanup_environment)
+
+check_stop()
+policy = ModelClient(port=args.port, stop_file=stop_file)
 policy.reset()
 policy_info = policy.info()
+check_stop()
 action_downsample_ratio = policy_info["action_downsample_ratio"]
 debug_outputs = args.output_mode == "debug"
-print(f"Modo de execucao: {args.runtime_mode}")
+print(f"Modo de captura: {args.runtime_mode}")
 print(f"Saidas: {args.output_mode}")
+print(f"Modo de jogo: {args.game_mode}")
+print(f"Jogador do agente: {args.agent_slot}")
+print(f"Recuperacao inteligente: {'ligada' if args.smart_recovery else 'desligada'}")
 
 CKPT_NAME = Path(policy_info["ckpt_path"]).stem
 if not menu_allowed:
@@ -74,12 +115,19 @@ if debug_outputs:
 supervisor = ObjectiveSupervisor(
     process_name=args.process,
     allow_menu=menu_allowed,
-    enable_skills=not args.no_unstuck,
+    enable_recovery=args.smart_recovery,
     log_path=PATH_SUPERVISOR,
 )
 print(f"Supervisor profile: {supervisor.profile.name} ({supervisor.profile.genre})")
-if args.no_unstuck:
-    print("Skills de recuperação do supervisor desativadas.")
+if not args.smart_recovery:
+    print("Recuperacao inteligente desativada.")
+fighting_assist = FightingAssist(
+    enabled=args.game_mode == "fighting",
+    process_name=args.process,
+    agent_slot=args.agent_slot,
+)
+if fighting_assist.enabled:
+    print("Modo jogo de luta ativado: movimento lateral, pulos e ritmo de ataque incentivados.")
 
 def preprocess_img(main_image):
     main_cv = cv2.cvtColor(np.array(main_image), cv2.COLOR_RGB2BGR)
@@ -116,10 +164,12 @@ TOKEN_SET = BUTTON_ACTION_TOKENS
 
 print("Model loaded, starting environment...")
 for i in range(3):
+    check_stop()
     print(f"{3 - i}...")
     time.sleep(1)
 
 try:
+    check_stop()
     env = GamepadEnv(
         game=args.process,
         game_speed=1.0,
@@ -127,6 +177,7 @@ try:
         async_mode=True,
         screenshot_backend=args.screenshot_backend,
         runtime_mode=args.runtime_mode,
+        agent_slot=args.agent_slot,
     )
 except ValueError as exc:
     print()
@@ -138,33 +189,66 @@ except Exception as exc:
     print(f"Falha ao iniciar o ambiente do jogo: {exc}")
     sys.exit(1)
 
+
+def press_gamepad_button(button, duration=0.08):
+    env.gamepad_emulator.press_button(button)
+    env.gamepad_emulator.gamepad.update()
+    time.sleep(duration)
+    env.gamepad_emulator.release_button(button)
+    env.gamepad_emulator.gamepad.update()
+
+
+def run_player2_join_macro():
+    print("Modo Player 2: movendo para a direita e confirmando entrada...")
+    env.gamepad_emulator.reset()
+    time.sleep(0.1)
+
+    env.gamepad_emulator.set_joystick("AXIS_LEFTX", 32767)
+    env.gamepad_emulator.set_joystick("AXIS_LEFTY", 0)
+    env.gamepad_emulator.press_button("DPAD_RIGHT")
+    env.gamepad_emulator.gamepad.update()
+    time.sleep(0.55)
+
+    env.gamepad_emulator.release_button("DPAD_RIGHT")
+    env.gamepad_emulator.set_joystick("AXIS_LEFTX", 0)
+    env.gamepad_emulator.set_joystick("AXIS_LEFTY", 0)
+    env.gamepad_emulator.gamepad.update()
+    time.sleep(0.12)
+
+    press_gamepad_button("SOUTH", duration=0.12)
+    time.sleep(0.15)
+    env.gamepad_emulator.reset()
+
+
 # These games may require a menu/button nudge to initialize the controller.
 if args.process.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init:
     print(f"GamepadEnv ready for {args.process} at {env.env_fps} FPS")
     print("Executando macro automática de inicialização para este jogo...")
     for i in range(3):
+        check_stop()
         print(f"{3 - i}...")
         time.sleep(1)
 
     def press(button):
-        env.gamepad_emulator.press_button(button)
-        env.gamepad_emulator.gamepad.update()
-        time.sleep(0.05)
-        env.gamepad_emulator.release_button(button)
-        env.gamepad_emulator.gamepad.update()
+        press_gamepad_button(button, duration=0.05)
 
     press("SOUTH")
     for k in range(5):
+        check_stop()
         press("EAST")
         time.sleep(0.3)
 elif args.process.lower() in {"isaac-ng.exe", "cuphead.exe"}:
     print(f"Skipping special startup button macro for {args.process}.")
 
 env.reset()
+if args.agent_slot == "player2":
+    check_stop()
+    run_player2_join_macro()
 env.pause()
 
 
 # Initial call to get state
+check_stop()
 obs, reward, terminated, truncated, info = env.step(action=zero_action)
 
 frames = None
@@ -177,12 +261,14 @@ with debug_recorder_context as debug_recorder:
     with clean_recorder_context as clean_recorder:
         try:
             while True:
+                check_stop()
                 obs = preprocess_img(obs)
                 if debug_outputs:
                     obs.save(PATH_DEBUG / f"{step_count:05d}.png")
-                supervisor.observe(obs, step_count)
+                perception_state = supervisor.observe(obs, step_count)
 
                 pred = policy.predict(obs)
+                check_stop()
 
                 j_left, j_right, buttons = pred["j_left"], pred["j_right"], pred["buttons"]
 
@@ -219,11 +305,16 @@ with debug_recorder_context as debug_recorder:
                 if decision.reasons:
                     print(f"Supervisor[{decision.profile}/{decision.objective}]: {'; '.join(decision.reasons)}")
 
+                fighting_decision = fighting_assist.apply(env_actions, perception_state, step_count, obs)
+                if fighting_decision.reasons:
+                    print(f"Fighting[{fighting_decision.changed_actions}]: {'; '.join(fighting_decision.reasons)}")
+
                 if debug_outputs:
                     print(f"Executing {len(env_actions)} actions, each action will be repeated {action_downsample_ratio} times")
 
                 for i, a in enumerate(env_actions):
                     for _ in range(action_downsample_ratio):
+                        check_stop()
                         obs, reward, terminated, truncated, info = env.step(action=a)
 
                         if debug_outputs:
@@ -256,5 +347,4 @@ with debug_recorder_context as debug_recorder:
 
                 step_count += 1
         finally:
-            env.unpause()
-            env.close()
+            cleanup_environment()

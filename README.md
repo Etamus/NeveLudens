@@ -42,10 +42,13 @@ Abre a interface principal em WPF. Por ela você pode:
 
 - Selecionar uma janela de jogo detectada.
 - Digitar manualmente o nome do `.exe`.
-- Escolher o modo de captura: `auto`, `dxcam` ou `pyautogui`.
-- Escolher o modo de execução: `Precisão` ou `Tempo real`.
-- Escolher o modo de saída: `Normal` ou `Debug`.
-- Ativar ou desativar ações `START`, `BACK` e `GUIDE`.
+- Escolher a captura: `auto`, `dxcam` ou `pyautogui`.
+- Escolher o modo de captura: `Precisão` ou `Tempo real`.
+- Escolher a saída de depuração: `Normal` ou `Debug`.
+- Escolher o modo de jogo: `Padrão` ou `Jogo de luta`.
+- Escolher o jogador do agente: `Automático` ou `Player 2`.
+- Ligar ou desligar a recuperação inteligente.
+- Ativar ou desativar **Permitir acesso de menus**, que controla `START`, `BACK` e `GUIDE`.
 - Iniciar e parar o agente.
 - Rodar diagnóstico de captura.
 - Acompanhar o log de execução na própria janela.
@@ -53,21 +56,40 @@ Abre a interface principal em WPF. Por ela você pode:
 Padrões atuais:
 
 - Porta do servidor: `5555`.
-- Ações `START`, `BACK` e `GUIDE`: liberadas por padrão, com toggle na interface.
+- Permitir acesso de menus: ligado por padrão.
 - Captura recomendada: `auto`.
-- Modo padrão: `Precisão`.
-- Saídas padrão: `Normal`.
+- Modo de captura padrão: `Precisão`.
+- Saída de depuração padrão: `Normal`.
+- Modo de jogo padrão: `Padrão`, sem filtro extra sobre a IA.
+- Jogador do agente padrão: `Automático`, mantendo o comportamento atual.
+- Recuperação inteligente: ligada por padrão.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
-Modos de execução:
+Modos de captura:
 
 - `Precisão`: comportamento original. Usa execução em passos com `xspeedhack`.
 - `Tempo real`: não usa `xspeedhack`; apenas captura a tela e envia controle virtual.
 
-Modos de saída:
+Saída de depuração:
 
 - `Normal`: não salva PNG por frame, vídeo debug, vídeo limpo, ações JSON ou log detalhado do supervisor.
 - `Debug`: salva os mesmos artefatos de depuração usados anteriormente.
+
+Modo de jogo:
+
+- `Padrão`: não adiciona nenhuma camada específica de gênero.
+- `Jogo de luta`: ativa uma camada opcional simples que incentiva mais movimento lateral, pulos e golpes ritmados. Ela não tenta entender o lado do personagem nem substituir a IA base.
+
+Jogador do agente:
+
+- `Automático`: comportamento atual. O jogo decide a posição do controle virtual conforme a ordem de dispositivos.
+- `Player 2`: tenta fazer a IA entrar como segundo jogador. Primeiro aguarda o jogador humano assumir o Player 1; se nenhum controle XInput existir, cria um controle virtual parado para reservar o primeiro slot e depois cria o controle ativo da IA. Após acordar o controle, move para a direita e confirma com `SOUTH`/A para ajudar em telas de escolha de lado.
+
+Recuperação inteligente:
+
+- Une memória temporal e anti-loop em uma única opção.
+- Quando ligada, guarda os últimos frames resumidos, ações e eventos para saber se a tela está parada ou se a IA repetiu o mesmo comando.
+- Quando detecta travamento ou repetição forte, permite acionar skills de recuperação conforme o perfil interno do jogo.
 
 ### `instalar.bat`
 
@@ -125,9 +147,9 @@ Esses números ajudam a definir expectativas. O modelo generalista não tem o me
 
 `neveludens/perception.py` analisa brilho, contraste, movimento, bordas, tela escura, loading provável e tela estática. Essa análise roda ao lado do modelo e não altera o frame principal.
 
-### Memória temporal
+### Recuperação inteligente
 
-`neveludens/memory.py` guarda histórico curto de frames, ações e eventos. Ela identifica repetição de comando, pouca mudança visual e sequências de possível travamento.
+`neveludens/memory.py` guarda histórico curto de frames, ações e eventos. Esse histórico alimenta o anti-loop e as skills de recuperação. Na interface, memória temporal e anti-loop aparecem juntos como **Recuperação inteligente**.
 
 ### Supervisor de objetivos
 
@@ -140,6 +162,14 @@ Esses números ajudam a definir expectativas. O modelo generalista não tem o me
 - `wait_loading`: reduz comandos durante telas de loading provável.
 - `unstuck`: força uma ação de destravamento quando a imagem muda pouco.
 - `break_repetition`: quebra padrões de ação repetidos demais.
+
+### Modo de luta
+
+`neveludens/fighting.py` é uma camada opcional. Ela só roda quando **Modo de jogo** está em **Jogo de luta**.
+
+Essa camada não usa detector visual, não tenta descobrir quem está de qual lado e não cria estratégia própria. Ela apenas incentiva o agente a se movimentar mais para direita/esquerda, pular com mais frequência e atacar em pulsos curtos quando o modelo fica passivo.
+
+Para `StreetFighter6.exe`/`SF6.exe`, o ritmo de movimento, pulo e ataque é mais agressivo. O modo **Padrão** não usa essa camada.
 
 ### Perfis por jogo
 
@@ -204,10 +234,13 @@ Pastas usadas:
 3. Clique em **Atualizar** se o jogo não aparecer.
 4. Selecione o jogo ou digite o nome do `.exe`.
 5. Deixe a captura em `auto`.
-6. Deixe o modo em **Precisão** ou escolha **Tempo real**.
-7. Deixe as saídas em **Normal** ou escolha **Debug** para gravar PNG/vídeos/logs detalhados.
-8. Clique em **Iniciar**.
-9. Para parar, clique em **Parar** no mesmo botão.
+6. Deixe o modo de captura em **Precisão** ou escolha **Tempo real**.
+7. Deixe a saída de depuração em **Normal** ou escolha **Debug** para gravar PNG/vídeos/logs detalhados.
+8. Deixe o modo de jogo em **Padrão**, ou escolha **Jogo de luta** para Street Fighter 6.
+9. Deixe o jogador do agente em **Automático**, ou escolha **Player 2** quando quiser que a IA tente entrar como segundo jogador.
+10. Deixe **Recuperação inteligente** ligada para usar memória temporal e anti-loop juntos.
+11. Clique em **Iniciar**.
+12. Para parar, clique em **Parar** no mesmo botão.
 
 Se o agente parecer cego, vendo tela preta ou reagindo a uma imagem congelada, use **Diagnosticar** na própria interface.
 
@@ -242,7 +275,7 @@ Normalmente você não precisa deles, mas continuam disponíveis:
 ```
 
 ```bat
-.venv\Scripts\python.exe scripts\play.py --process nome_do_jogo.exe --port 5555 --screenshot-backend auto
+.venv\Scripts\python.exe scripts\play.py --process nome_do_jogo.exe --port 5555 --screenshot-backend auto --agent-slot auto
 ```
 
 Para uso comum, prefira `instalar.bat` e `iniciar.bat`.
