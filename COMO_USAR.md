@@ -34,9 +34,10 @@ iniciar.bat
 4. Selecione o processo do jogo na lista ou digite o nome exato do `.exe`.
 5. Deixe a captura em `Automática`, a menos que queira testar manualmente `dxcam` ou `pyautogui`.
 6. Deixe o modo em **Precisão** ou escolha **Tempo real**.
-7. Deixe `START / BACK / GUIDE` ativado ou desative se quiser bloquear ações de menu.
-8. Clique em **Iniciar**.
-9. Para parar, clique em **Parar** no mesmo botão.
+7. Deixe as saídas em **Normal** ou escolha **Debug** para gravar PNG, vídeos e logs detalhados.
+8. Deixe `START / BACK / GUIDE` ativado ou desative se quiser bloquear ações de menu.
+9. Clique em **Iniciar**.
+10. Para parar, clique em **Parar** no mesmo botão.
 
 Padrões atuais:
 
@@ -44,6 +45,7 @@ Padrões atuais:
 - `START`, `BACK` e `GUIDE`: liberados por padrão, com toggle na interface.
 - Captura: `dxcam` primeiro, `pyautogui` como fallback conservador.
 - Modo padrão: `Precisão`.
+- Saídas padrão: `Normal`.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
 ## Diagnóstico de captura
@@ -62,10 +64,10 @@ A captura correta deve mostrar exatamente a janela do jogo. Se a imagem estiver 
 
 - `logs\gui_run_*.log`: log espelho do iniciar.
 - `logs\server_*.log`: log do servidor local.
-- `out\<modelo>\*_ACTIONS.json`: ações enviadas ao jogo.
-- `out\<modelo>\*_SUPERVISOR.json`: decisões do supervisor.
-- `out\<modelo>\*_DEBUG.mp4`: vídeo de debug.
-- `out\<modelo>\*_CLEAN.mp4`: vídeo limpo.
+- `out\<modelo>\*_ACTIONS.json`: ações enviadas ao jogo, salvo apenas no modo `Debug`.
+- `out\<modelo>\*_SUPERVISOR.json`: decisões do supervisor, salvo apenas no modo `Debug`.
+- `out\<modelo>\*_DEBUG.mp4`: vídeo de debug, salvo apenas no modo `Debug`.
+- `out\<modelo>\*_CLEAN.mp4`: vídeo limpo, salvo apenas no modo `Debug`.
 
 ## Observações
 

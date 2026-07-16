@@ -111,7 +111,7 @@ $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="NeveLudens - Iniciar"
-        Width="840" Height="640"
+        Width="840" Height="700"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -311,6 +311,7 @@ $xaml = @"
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <TextBlock Grid.Row="0" Text="Janela detectada:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
@@ -349,7 +350,15 @@ $xaml = @"
                                           Style="{StaticResource ToggleCheck}"/>
                             </StackPanel>
 
-                            <Button Grid.Row="7" x:Name="RefreshButton" Content="Atualizar" Style="{StaticResource GhostBtn}"
+                            <StackPanel Grid.Row="7" Margin="0,12,0,0">
+                                <TextBlock Text="Saídas:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="OutputModeCombo">
+                                    <ComboBoxItem Content="Normal" Tag="normal" IsSelected="True"/>
+                                    <ComboBoxItem Content="Debug" Tag="debug"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <Button Grid.Row="8" x:Name="RefreshButton" Content="Atualizar" Style="{StaticResource GhostBtn}"
                                     HorizontalAlignment="Right" Margin="0,18,0,0"/>
                         </Grid>
                     </Border>
@@ -397,6 +406,7 @@ $ManualProcessBox = $window.FindName("ManualProcessBox")
 $BackendCombo = $window.FindName("BackendCombo")
 $RuntimeModeCombo = $window.FindName("RuntimeModeCombo")
 $MenuActionsCheck = $window.FindName("MenuActionsCheck")
+$OutputModeCombo = $window.FindName("OutputModeCombo")
 $RefreshButton = $window.FindName("RefreshButton")
 $StartButton = $window.FindName("StartButton")
 $DiagnoseButton = $window.FindName("DiagnoseButton")
@@ -526,6 +536,14 @@ function Get-RuntimeMode {
 
 function Get-AllowMenuActions {
     return [bool]$MenuActionsCheck.IsChecked
+}
+
+function Get-OutputMode {
+    $selected = $OutputModeCombo.SelectedItem
+    if ($selected -and $selected.Tag) {
+        return [string]$selected.Tag
+    }
+    return "normal"
 }
 
 function Set-RunButtonState {
@@ -680,6 +698,7 @@ $StartButton.Add_Click({
             "--process", $processName,
             "--screenshot-backend", (Get-BackendName),
             "--runtime-mode", (Get-RuntimeMode),
+            "--output-mode", (Get-OutputMode),
             "--port", "5555",
             "--non-interactive"
         )

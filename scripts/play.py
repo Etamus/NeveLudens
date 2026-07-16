@@ -4,6 +4,7 @@ import time
 import json
 from pathlib import Path
 from collections import OrderedDict
+from contextlib import nullcontext
 
 import cv2
 import numpy as np
@@ -23,6 +24,7 @@ parser.add_argument("--block-menu", action="store_true", help="Block START/BACK/
 parser.add_argument("--port", type=int, default=5555, help="Port for model server")
 parser.add_argument("--screenshot-backend", choices=["auto", "dxcam", "pyautogui"], default="auto", help="Screenshot backend")
 parser.add_argument("--runtime-mode", choices=["precision", "realtime"], default="precision", help="Runtime mode")
+parser.add_argument("--output-mode", choices=["normal", "debug"], default="normal", help="Output mode")
 parser.add_argument("--no-special-init", action="store_true", help="Skip game-specific startup button macro")
 parser.add_argument("--no-unstuck", action="store_true", help="Disable supervisor recovery skills")
 
@@ -33,7 +35,9 @@ policy = ModelClient(port=args.port)
 policy.reset()
 policy_info = policy.info()
 action_downsample_ratio = policy_info["action_downsample_ratio"]
+debug_outputs = args.output_mode == "debug"
 print(f"Modo de execucao: {args.runtime_mode}")
+print(f"Saidas: {args.output_mode}")
 
 CKPT_NAME = Path(policy_info["ckpt_path"]).stem
 if not menu_allowed:
@@ -41,28 +45,31 @@ if not menu_allowed:
 else:
     print("Ações de menu liberadas: previsões START/BACK/GUIDE podem chegar ao jogo.")
 
-PATH_DEBUG = PATH_REPO / "debug"
-PATH_DEBUG.mkdir(parents=True, exist_ok=True)
-
-PATH_OUT = (PATH_REPO / "out" / CKPT_NAME).resolve()
-PATH_OUT.mkdir(parents=True, exist_ok=True)
-
 BUTTON_PRESS_THRES = 0.5
 
-# Find in path_out the list of existing video files, named 0001.mp4, 0002.mp4, etc.
-# If they exist, find the max number and set the next number to be max + 1
-video_files = sorted(PATH_OUT.glob("*_DEBUG.mp4"))
-if video_files:
-    existing_numbers = [f.name.split("_")[0] for f in video_files]
-    existing_numbers = [int(n) for n in existing_numbers if n.isdigit()]
-    next_number = max(existing_numbers) + 1
-else:
-    next_number = 1
+PATH_DEBUG = PATH_REPO / "debug"
+PATH_OUT = (PATH_REPO / "out" / CKPT_NAME).resolve()
 
-PATH_MP4_DEBUG = PATH_OUT / f"{next_number:04d}_DEBUG.mp4"
-PATH_MP4_CLEAN = PATH_OUT / f"{next_number:04d}_CLEAN.mp4"
-PATH_ACTIONS = PATH_OUT / f"{next_number:04d}_ACTIONS.json"
-PATH_SUPERVISOR = PATH_OUT / f"{next_number:04d}_SUPERVISOR.json"
+PATH_MP4_DEBUG = None
+PATH_MP4_CLEAN = None
+PATH_ACTIONS = None
+PATH_SUPERVISOR = None
+
+if debug_outputs:
+    PATH_DEBUG.mkdir(parents=True, exist_ok=True)
+    PATH_OUT.mkdir(parents=True, exist_ok=True)
+
+    artifact_files = []
+    for pattern in ("*_DEBUG.mp4", "*_CLEAN.mp4", "*_ACTIONS.json", "*_SUPERVISOR.json"):
+        artifact_files.extend(PATH_OUT.glob(pattern))
+    existing_numbers = [f.name.split("_")[0] for f in artifact_files]
+    existing_numbers = [int(n) for n in existing_numbers if n.isdigit()]
+    next_number = max(existing_numbers, default=0) + 1
+
+    PATH_MP4_DEBUG = PATH_OUT / f"{next_number:04d}_DEBUG.mp4"
+    PATH_MP4_CLEAN = PATH_OUT / f"{next_number:04d}_CLEAN.mp4"
+    PATH_ACTIONS = PATH_OUT / f"{next_number:04d}_ACTIONS.json"
+    PATH_SUPERVISOR = PATH_OUT / f"{next_number:04d}_SUPERVISOR.json"
 
 supervisor = ObjectiveSupervisor(
     process_name=args.process,
@@ -163,12 +170,16 @@ obs, reward, terminated, truncated, info = env.step(action=zero_action)
 frames = None
 step_count = 0
 
-with VideoRecorder(str(PATH_MP4_DEBUG), fps=60, crf=32, preset="medium") as debug_recorder:
-    with VideoRecorder(str(PATH_MP4_CLEAN), fps=60, crf=28, preset="medium") as clean_recorder:
+debug_recorder_context = VideoRecorder(str(PATH_MP4_DEBUG), fps=60, crf=32, preset="medium") if debug_outputs else nullcontext(None)
+clean_recorder_context = VideoRecorder(str(PATH_MP4_CLEAN), fps=60, crf=28, preset="medium") if debug_outputs else nullcontext(None)
+
+with debug_recorder_context as debug_recorder:
+    with clean_recorder_context as clean_recorder:
         try:
             while True:
                 obs = preprocess_img(obs)
-                obs.save(PATH_DEBUG / f"{step_count:05d}.png")
+                if debug_outputs:
+                    obs.save(PATH_DEBUG / f"{step_count:05d}.png")
                 supervisor.observe(obs, step_count)
 
                 pred = policy.predict(obs)
@@ -208,38 +219,40 @@ with VideoRecorder(str(PATH_MP4_DEBUG), fps=60, crf=32, preset="medium") as debu
                 if decision.reasons:
                     print(f"Supervisor[{decision.profile}/{decision.objective}]: {'; '.join(decision.reasons)}")
 
-                print(f"Executing {len(env_actions)} actions, each action will be repeated {action_downsample_ratio} times")
+                if debug_outputs:
+                    print(f"Executing {len(env_actions)} actions, each action will be repeated {action_downsample_ratio} times")
 
                 for i, a in enumerate(env_actions):
                     for _ in range(action_downsample_ratio):
                         obs, reward, terminated, truncated, info = env.step(action=a)
 
-                        # resize obs to 720p
-                        obs_viz = np.array(obs).copy()
-                        clean_viz = cv2.resize(obs_viz, (1920, 1080), interpolation=cv2.INTER_AREA)
-                        debug_viz = create_viz(
-                            cv2.resize(obs_viz, (1280, 720), interpolation=cv2.INTER_AREA), # 720p
-                            i,
-                            j_left,
-                            j_right,
-                            buttons,
-                            token_set=TOKEN_SET
-                        )
-                        debug_recorder.add_frame(debug_viz)
-                        clean_recorder.add_frame(clean_viz)
+                        if debug_outputs:
+                            # resize obs to 720p
+                            obs_viz = np.array(obs).copy()
+                            clean_viz = cv2.resize(obs_viz, (1920, 1080), interpolation=cv2.INTER_AREA)
+                            debug_viz = create_viz(
+                                cv2.resize(obs_viz, (1280, 720), interpolation=cv2.INTER_AREA), # 720p
+                                i,
+                                j_left,
+                                j_right,
+                                buttons,
+                                token_set=TOKEN_SET
+                            )
+                            debug_recorder.add_frame(debug_viz)
+                            clean_recorder.add_frame(clean_viz)
 
                 # Append env_actions dictionnary to JSONL file
-                with open(PATH_ACTIONS, "a") as f:
-                    for i, a in enumerate(env_actions):
-                        # convert numpy arrays to lists for JSON serialization
-                        for k, v in a.items():
-                            if isinstance(v, np.ndarray):
-                                a[k] = v.tolist()
-                        a["step"] = step_count
-                        a["substep"] = i
-                        json.dump(a, f)
-                        f.write("\n")
-
+                if debug_outputs:
+                    with open(PATH_ACTIONS, "a") as f:
+                        for i, a in enumerate(env_actions):
+                            # convert numpy arrays to lists for JSON serialization
+                            for k, v in a.items():
+                                if isinstance(v, np.ndarray):
+                                    a[k] = v.tolist()
+                            a["step"] = step_count
+                            a["substep"] = i
+                            json.dump(a, f)
+                            f.write("\n")
 
                 step_count += 1
         finally:

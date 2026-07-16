@@ -44,6 +44,7 @@ Abre a interface principal em WPF. Por ela você pode:
 - Digitar manualmente o nome do `.exe`.
 - Escolher o modo de captura: `auto`, `dxcam` ou `pyautogui`.
 - Escolher o modo de execução: `Precisão` ou `Tempo real`.
+- Escolher o modo de saída: `Normal` ou `Debug`.
 - Ativar ou desativar ações `START`, `BACK` e `GUIDE`.
 - Iniciar e parar o agente.
 - Rodar diagnóstico de captura.
@@ -55,12 +56,18 @@ Padrões atuais:
 - Ações `START`, `BACK` e `GUIDE`: liberadas por padrão, com toggle na interface.
 - Captura recomendada: `auto`.
 - Modo padrão: `Precisão`.
+- Saídas padrão: `Normal`.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
 Modos de execução:
 
 - `Precisão`: comportamento original. Usa execução em passos com `xspeedhack`.
 - `Tempo real`: não usa `xspeedhack`; apenas captura a tela e envia controle virtual.
+
+Modos de saída:
+
+- `Normal`: não salva PNG por frame, vídeo debug, vídeo limpo, ações JSON ou log detalhado do supervisor.
+- `Debug`: salva os mesmos artefatos de depuração usados anteriormente.
 
 ### `instalar.bat`
 
@@ -198,17 +205,18 @@ Pastas usadas:
 4. Selecione o jogo ou digite o nome do `.exe`.
 5. Deixe a captura em `auto`.
 6. Deixe o modo em **Precisão** ou escolha **Tempo real**.
-7. Clique em **Iniciar**.
-8. Para parar, clique em **Parar** no mesmo botão.
+7. Deixe as saídas em **Normal** ou escolha **Debug** para gravar PNG/vídeos/logs detalhados.
+8. Clique em **Iniciar**.
+9. Para parar, clique em **Parar** no mesmo botão.
 
 Se o agente parecer cego, vendo tela preta ou reagindo a uma imagem congelada, use **Diagnosticar** na própria interface.
 
 ## Saídas Geradas
 
-- `out/<modelo>/*_DEBUG.mp4`: vídeo com visualização de debug.
-- `out/<modelo>/*_CLEAN.mp4`: vídeo limpo da captura.
-- `out/<modelo>/*_ACTIONS.json`: ações finais enviadas ao jogo.
-- `out/<modelo>/*_SUPERVISOR.json`: percepção, memória, objetivo e skill usada.
+- `out/<modelo>/*_DEBUG.mp4`: vídeo com visualização de debug, salvo apenas no modo `Debug`.
+- `out/<modelo>/*_CLEAN.mp4`: vídeo limpo da captura, salvo apenas no modo `Debug`.
+- `out/<modelo>/*_ACTIONS.json`: ações finais enviadas ao jogo, salvo apenas no modo `Debug`.
+- `out/<modelo>/*_SUPERVISOR.json`: percepção, memória, objetivo e skill usada, salvo apenas no modo `Debug`.
 - `logs/server_*.log`: carregamento do modelo e servidor.
 - `logs/gui_run_*.log`: log espelho da interface de início.
 

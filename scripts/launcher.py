@@ -37,6 +37,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="precision",
         help="'precision' uses the stepped xspeedhack mode. 'realtime' only captures and sends controller input.",
     )
+    parser.add_argument(
+        "--output-mode",
+        choices=["normal", "debug"],
+        default="normal",
+        help="'normal' disables PNG/video/session artifacts. 'debug' keeps the full current recording outputs.",
+    )
     menu_group = parser.add_mutually_exclusive_group()
     menu_group.add_argument(
         "--allow-menu",
@@ -329,6 +335,7 @@ def run_player(
     allow_menu: bool,
     screenshot_backend: str,
     runtime_mode: str,
+    output_mode: str,
     special_init: bool,
     env: dict[str, str],
 ) -> int:
@@ -343,6 +350,8 @@ def run_player(
         screenshot_backend,
         "--runtime-mode",
         runtime_mode,
+        "--output-mode",
+        output_mode,
     ]
     if allow_menu:
         cmd.append("--allow-menu")
@@ -383,6 +392,7 @@ def main(argv: list[str] | None = None) -> int:
     allow_menu = args.allow_menu
     screenshot_backend = args.screenshot_backend
     runtime_mode = args.runtime_mode
+    output_mode = args.output_mode
     special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init
     if special_init:
         print("Macro especial de inicialização ativada para este jogo.")
@@ -392,6 +402,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Ações START/BACK/GUIDE: bloqueadas")
     print(f"Captura: {screenshot_backend}")
     print(f"Modo de execucao: {runtime_mode}")
+    print(f"Saidas: {output_mode}")
     print(f"Porta do servidor: {args.port}")
     port = args.port
 
@@ -416,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Porta: {port}")
     print("Captura: dxcam com fallback conservador para pyautogui")
     print(f"Modo: {runtime_mode}")
+    print(f"Saidas: {output_mode}")
     print(f"Ações de menu: {'liberadas' if allow_menu else 'bloqueadas'}")
 
     config.update({
@@ -423,13 +435,14 @@ def main(argv: list[str] | None = None) -> int:
         "allow_menu": allow_menu,
         "screenshot_backend": screenshot_backend,
         "runtime_mode": runtime_mode,
+        "output_mode": output_mode,
         "special_init": special_init,
         "port": port,
     })
     save_config(config)
 
     try:
-        return run_player(process_name, port, allow_menu, screenshot_backend, runtime_mode, special_init, env)
+        return run_player(process_name, port, allow_menu, screenshot_backend, runtime_mode, output_mode, special_init, env)
     except KeyboardInterrupt:
         print()
         print("Interrompido pelo usuário.")
