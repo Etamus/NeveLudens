@@ -13,6 +13,7 @@ set "PYTHON_CMD="
 set "PYTHONUTF8=1"
 set "PYTHONUNBUFFERED=1"
 set "DEBUG=0"
+set "BNB_CUDA_VERSION=130"
 set "HF_HOME=%ROOT%\.cache\huggingface"
 set "HF_HUB_CACHE=%ROOT%\.cache\huggingface\hub"
 set "TRANSFORMERS_CACHE=%ROOT%\.cache\huggingface\transformers"
@@ -97,7 +98,7 @@ if exist "%MODEL_PATH%" (
 )
 
 call :step "6. Validacao"
-call :run "%VENV_PY%" -c "import sys, torch, torchvision, neveludens, cv2, dxcam, vgamepad, xspeedhack, zmq; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); cuda=torch.cuda.is_available(); print('CUDA disponivel:', cuda); sys.exit(0 if cuda else 2)"
+call :run "%VENV_PY%" -c "import sys, torch, torchvision, neveludens, cv2, dxcam, vgamepad, xspeedhack, zmq, transformers, accelerate, bitsandbytes, safetensors; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('bitsandbytes:', bitsandbytes.__version__); cuda=torch.cuda.is_available(); print('CUDA disponivel:', cuda); sys.exit(0 if cuda else 2)"
 if errorlevel 1 exit /b 1
 
 call :run "%VENV_PY%" -c "import torch, vgamepad; print('GPU:', torch.cuda.get_device_name(0)); gamepad=vgamepad.VX360Gamepad(); gamepad.reset(); gamepad.update(); print('Controle virtual: OK'); print('Importacoes principais: OK')"

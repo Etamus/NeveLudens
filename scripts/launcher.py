@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import argparse
+import importlib.util
 import pickle
 import socket
 import subprocess
@@ -57,6 +58,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="auto",
         help="Controller slot preference. 'auto' keeps current behavior; 'player2' tries to make the agent the second player.",
     )
+    parser.add_argument(
+        "--multimodal-supervisor",
+        choices=["disabled", "enabled"],
+        default="disabled",
+        help="Optional Qwen3.5 4B visual supervisor. Disabled keeps the original behavior.",
+    )
     recovery_group = parser.add_mutually_exclusive_group()
     recovery_group.add_argument(
         "--smart-recovery",
@@ -105,6 +112,7 @@ def local_env() -> dict[str, str]:
     env["DEBUG"] = "0"
     env["PYTHONUTF8"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    env.setdefault("BNB_CUDA_VERSION", "130")
     env["HF_HOME"] = str(REPO / ".cache" / "huggingface")
     env["HF_HUB_CACHE"] = str(REPO / ".cache" / "huggingface" / "hub")
     env["TRANSFORMERS_CACHE"] = str(REPO / ".cache" / "huggingface" / "transformers")
@@ -141,7 +149,7 @@ def console_safe(text: str) -> str:
     return text.encode(encoding, errors="replace").decode(encoding, errors="replace")
 
 
-def preflight(agent_slot: str = "auto") -> None:
+def preflight(agent_slot: str = "auto", multimodal_supervisor: str = "disabled") -> None:
     if not VENV_PYTHON.exists():
         raise RuntimeError("Ambiente .venv não encontrado. Rode iniciar.bat novamente.")
 
@@ -167,6 +175,20 @@ def preflight(agent_slot: str = "auto") -> None:
     print(f"CUDA OK: {torch.cuda.get_device_name(0)}")
     if agent_slot != "player2":
         print("Controle virtual OK")
+    if multimodal_supervisor == "enabled":
+        missing = [
+            name
+            for name in ("accelerate", "bitsandbytes", "safetensors", "transformers")
+            if importlib.util.find_spec(name) is None
+        ]
+        if missing:
+            raise RuntimeError(
+                "Dependencias do supervisor multimodal ausentes: "
+                + ", ".join(missing)
+                + ". Rode instalar.bat."
+            )
+
+        print("Supervisor multimodal OK: Qwen3.5 4B em bitsandbytes 4-bit")
     print()
 
 
@@ -414,6 +436,7 @@ def run_player(
     output_mode: str,
     game_mode: str,
     agent_slot: str,
+    multimodal_supervisor: str,
     smart_recovery: bool,
     special_init: bool,
     stop_file: Path | None,
@@ -436,6 +459,8 @@ def run_player(
         game_mode,
         "--agent-slot",
         agent_slot,
+        "--multimodal-supervisor",
+        multimodal_supervisor,
     ]
     if stop_file is not None:
         cmd.extend(["--stop-file", str(stop_file)])
@@ -479,7 +504,7 @@ def main(argv: list[str] | None = None) -> int:
         raise StopRequested("Stop requested before launcher preflight")
 
     try:
-        preflight(args.agent_slot)
+        preflight(args.agent_slot, args.multimodal_supervisor)
     except Exception as exc:
         print(f"Falha na verificacao inicial: {exc}")
         return 1
@@ -501,6 +526,7 @@ def main(argv: list[str] | None = None) -> int:
     output_mode = args.output_mode
     game_mode = args.game_mode
     agent_slot = args.agent_slot
+    multimodal_supervisor = args.multimodal_supervisor
     smart_recovery = args.smart_recovery
     special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init
     if special_init:
@@ -514,6 +540,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Saidas: {output_mode}")
     print(f"Modo de jogo: {game_mode}")
     print(f"Jogador do agente: {agent_slot}")
+    print(f"Supervisor multimodal: {multimodal_supervisor}")
     print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
     print(f"Porta do servidor: {args.port}")
     port = args.port
@@ -542,6 +569,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Saidas: {output_mode}")
     print(f"Modo de jogo: {game_mode}")
     print(f"Jogador do agente: {agent_slot}")
+    print(f"Supervisor multimodal: {multimodal_supervisor}")
     print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
     print(f"Ações de menu: {'liberadas' if allow_menu else 'bloqueadas'}")
 
@@ -553,6 +581,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_mode": output_mode,
         "game_mode": game_mode,
         "agent_slot": agent_slot,
+        "multimodal_supervisor": multimodal_supervisor,
         "smart_recovery": smart_recovery,
         "special_init": special_init,
         "port": port,
@@ -569,6 +598,7 @@ def main(argv: list[str] | None = None) -> int:
             output_mode,
             game_mode,
             agent_slot,
+            multimodal_supervisor,
             smart_recovery,
             special_init,
             stop_file,

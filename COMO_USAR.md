@@ -37,10 +37,11 @@ iniciar.bat
 7. Deixe a saída de depuração em **Normal** ou escolha **Debug** para gravar PNG, vídeos e logs detalhados.
 8. Deixe o modo de jogo em **Padrão**, ou escolha **Jogo de luta** para Street Fighter 6.
 9. Deixe **Jogador do agente** em **Automático**, ou escolha **Player 2** quando quiser que a IA tente entrar como segundo jogador.
-10. Deixe **Recuperação inteligente** ligada para usar memória temporal e anti-loop juntos.
-11. Deixe **Permitir acesso de menus** ativado ou desative se quiser bloquear ações `START`, `BACK` e `GUIDE`.
-12. Clique em **Iniciar**.
-13. Para parar, clique em **Parar** no mesmo botão.
+10. Deixe **Supervisor multimodal** em **Desativado**, ou escolha **Ativado** para usar Qwen3.5 4B como orientador visual opcional.
+11. Deixe **Recuperação inteligente** ligada para usar memória temporal e anti-loop juntos.
+12. Deixe **Permitir acesso de menus** ativado ou desative se quiser bloquear ações `START`, `BACK` e `GUIDE`.
+13. Clique em **Iniciar**.
+14. Para parar, clique em **Parar** no mesmo botão.
 
 Padrões atuais:
 
@@ -51,12 +52,15 @@ Padrões atuais:
 - Saída de depuração padrão: `Normal`.
 - Modo de jogo padrão: `Padrão`.
 - Jogador do agente padrão: `Automático`.
+- Supervisor multimodal padrão: `Desativado`.
 - Recuperação inteligente: ligada.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
 No **Jogo de luta**, o NeveLudens incentiva mais movimento lateral, pulos e golpes ritmados, sem tentar substituir a IA base com estratégia própria. Para Street Fighter 6, prefira controles Modernos e use **Jogador do agente: Player 2** se você quiser jogar contra a IA.
 
 Quando **Jogador do agente** está em **Player 2**, o NeveLudens também tenta mover para a direita e confirmar com `SOUTH`/A após acordar o controle virtual.
+
+Quando **Supervisor multimodal** está em **Ativado**, o NeveLudens usa apenas **Qwen3.5 4B** como camada opcional. Ele carrega o modelo em `bitsandbytes` 4-bit, roda em segundo plano e só aplica orientações curtas quando recebe JSON válido. A VLM é conservadora: se não enxergar alvo visual claro, ela deve retornar `none` e não interfere na IA principal. Na primeira ativação, o modelo pode ser baixado para `.cache\huggingface` dentro do projeto.
 
 ## Diagnóstico de captura
 

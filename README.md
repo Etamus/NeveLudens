@@ -47,6 +47,7 @@ Abre a interface principal em WPF. Por ela você pode:
 - Escolher a saída de depuração: `Normal` ou `Debug`.
 - Escolher o modo de jogo: `Padrão` ou `Jogo de luta`.
 - Escolher o jogador do agente: `Automático` ou `Player 2`.
+- Escolher o supervisor multimodal: `Desativado` ou `Ativado`.
 - Ligar ou desligar a recuperação inteligente.
 - Ativar ou desativar **Permitir acesso de menus**, que controla `START`, `BACK` e `GUIDE`.
 - Iniciar e parar o agente.
@@ -62,6 +63,7 @@ Padrões atuais:
 - Saída de depuração padrão: `Normal`.
 - Modo de jogo padrão: `Padrão`, sem filtro extra sobre a IA.
 - Jogador do agente padrão: `Automático`, mantendo o comportamento atual.
+- Supervisor multimodal padrão: `Desativado`, mantendo o comportamento atual.
 - Recuperação inteligente: ligada por padrão.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
@@ -84,6 +86,14 @@ Jogador do agente:
 
 - `Automático`: comportamento atual. O jogo decide a posição do controle virtual conforme a ordem de dispositivos.
 - `Player 2`: tenta fazer a IA entrar como segundo jogador. Primeiro aguarda o jogador humano assumir o Player 1; se nenhum controle XInput existir, cria um controle virtual parado para reservar o primeiro slot e depois cria o controle ativo da IA. Após acordar o controle, move para a direita e confirma com `SOUTH`/A para ajudar em telas de escolha de lado.
+
+Supervisor multimodal:
+
+- `Desativado`: comportamento padrão. Nenhum modelo multimodal extra é carregado.
+- `Ativado`: inicia uma camada opcional com **Qwen3.5 4B** em `safetensors` carregado com `bitsandbytes` 4-bit. Ela roda de forma assíncrona, analisa screenshots ocasionais e retorna apenas uma orientação curta em JSON. O agente principal continua jogando normalmente; se o supervisor demorar, falhar ou retornar JSON inválido, a resposta é ignorada.
+- A VLM é conservadora por padrão: só aplica orientação quando identifica um alvo visual claro, como caminho, porta, prompt, inimigo, perigo ou menu real. Telas ambíguas, teto, chão, parede, escuridão ou frases genéricas são rejeitadas.
+- As orientações não são aplicadas continuamente. Elas entram como poucos pulsos curtos e há um intervalo maior entre novas análises para evitar atropelar a IA principal.
+- Na primeira ativação, o modelo pode ser baixado para `.cache\huggingface` dentro do projeto.
 
 Recuperação inteligente:
 

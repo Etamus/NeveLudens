@@ -29,6 +29,7 @@ function Set-LocalEnvironment {
     $env:PYTHONUTF8 = "1"
     $env:PYTHONUNBUFFERED = "1"
     $env:DEBUG = "0"
+    $env:BNB_CUDA_VERSION = "130"
     $env:HF_HOME = Join-Path $Repo ".cache\huggingface"
     $env:HF_HUB_CACHE = Join-Path $Repo ".cache\huggingface\hub"
     $env:TRANSFORMERS_CACHE = Join-Path $Repo ".cache\huggingface\transformers"
@@ -383,7 +384,15 @@ $xaml = @"
                                 </ComboBox>
                             </StackPanel>
 
-                            <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4" Orientation="Horizontal" VerticalAlignment="Center">
+                            <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,0,12,0">
+                                <TextBlock Text="Supervisor multimodal:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="MultimodalSupervisorCombo">
+                                    <ComboBoxItem Content="Desativado" Tag="disabled" IsSelected="True"/>
+                                    <ComboBoxItem Content="Ativado" Tag="enabled"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="4" Grid.Column="2" Grid.ColumnSpan="3" Orientation="Horizontal" VerticalAlignment="Center">
                                 <CheckBox x:Name="SmartRecoveryCheck" Content="Recuperação inteligente" IsChecked="True"
                                           Style="{StaticResource ToggleCheck}" Margin="0,0,28,0"/>
                                 <CheckBox x:Name="MenuActionsCheck" Content="Permitir acesso de menus" IsChecked="True"
@@ -436,6 +445,7 @@ $MenuActionsCheck = $window.FindName("MenuActionsCheck")
 $OutputModeCombo = $window.FindName("OutputModeCombo")
 $GameModeCombo = $window.FindName("GameModeCombo")
 $AgentSlotCombo = $window.FindName("AgentSlotCombo")
+$MultimodalSupervisorCombo = $window.FindName("MultimodalSupervisorCombo")
 $SmartRecoveryCheck = $window.FindName("SmartRecoveryCheck")
 $RefreshButton = $window.FindName("RefreshButton")
 $StartButton = $window.FindName("StartButton")
@@ -592,6 +602,14 @@ function Get-AgentSlot {
     return "auto"
 }
 
+function Get-MultimodalSupervisorMode {
+    $selected = $MultimodalSupervisorCombo.SelectedItem
+    if ($selected -and $selected.Tag) {
+        return [string]$selected.Tag
+    }
+    return "disabled"
+}
+
 function Get-SmartRecoveryEnabled {
     return [bool]$SmartRecoveryCheck.IsChecked
 }
@@ -680,6 +698,7 @@ function Start-LoggedPython {
         "cd /d `"$Repo`"",
         "set PYTHONUTF8=1",
         "set PYTHONUNBUFFERED=1",
+        "set BNB_CUDA_VERSION=130",
         "`"$VenvPython`" $argText >> `"$script:RunLogPath`" 2>&1"
     )
     Set-Content -LiteralPath $runCmdPath -Value $cmdLines -Encoding ASCII
@@ -692,6 +711,7 @@ function Start-LoggedPython {
     $psi.CreateNoWindow = $true
     $psi.EnvironmentVariables["PYTHONUTF8"] = "1"
     $psi.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"
+    $psi.EnvironmentVariables["BNB_CUDA_VERSION"] = "130"
 
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
@@ -792,6 +812,7 @@ $StartButton.Add_Click({
             "--output-mode", (Get-OutputMode),
             "--game-mode", (Get-GameMode),
             "--agent-slot", (Get-AgentSlot),
+            "--multimodal-supervisor", (Get-MultimodalSupervisorMode),
             "--port", "5555",
             "--non-interactive"
         )

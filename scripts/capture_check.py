@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PIL import Image, ImageStat
 
-from neveludens.game_env import get_process_info
+from neveludens.game_env import DxcamScreenshotBackend, _select_capture_target, get_process_info
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -40,28 +40,30 @@ def stats(image: Image.Image) -> tuple[tuple[float, float, float], bool]:
 def capture_pyautogui(window) -> Image.Image:
     import pyautogui
 
-    left, top, right, bottom = window.left, window.top, window.right, window.bottom
-    return pyautogui.screenshot(region=(left, top, right - left, bottom - top))
+    target = _select_capture_target(window)
+    return pyautogui.screenshot(region=target.pyautogui_bbox)
 
 
 def capture_dxcam(window) -> Image.Image:
-    import dxcam
-
-    left, top, right, bottom = window.left, window.top, window.right, window.bottom
-    camera = dxcam.create()
-    camera.start(region=(left, top, right, bottom), target_fps=30, video_mode=True)
-    time.sleep(0.7)
-    frame = camera.get_latest_frame()
-    camera.stop()
-    if frame is None:
-        return Image.new("RGB", (right - left, bottom - top), (0, 0, 0))
-    return Image.fromarray(frame)
+    target = _select_capture_target(window)
+    backend = DxcamScreenshotBackend(target, fps=30)
+    try:
+        time.sleep(0.7)
+        return backend.screenshot()
+    finally:
+        backend.close()
 
 
 def save_capture(process_name: str, backend: str) -> Path:
     window = find_window(process_name)
     window.activate()
     time.sleep(0.3)
+    target = _select_capture_target(window)
+    print(
+        "Região de captura: "
+        f"janela={target.raw_window_rect} visivel={target.visible_rect} "
+        f"dxcam={target.dxcam_region} monitor={target.output_name}"
+    )
 
     if backend == "dxcam":
         image = capture_dxcam(window)

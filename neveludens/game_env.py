@@ -1,6 +1,7 @@
 import ctypes
 import time
 import platform
+from dataclasses import dataclass
 
 import pyautogui
 import dxcam
@@ -20,6 +21,11 @@ import win32process
 import win32gui
 import win32api
 import win32con
+
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+except Exception:
+    pass
 
 
 def active_xinput_slots():
@@ -447,37 +453,243 @@ class PyautoguiScreenshotBackend:
         pass
 
 
+@dataclass(frozen=True)
+class CaptureTarget:
+    raw_window_rect: tuple[int, int, int, int]
+    visible_rect: tuple[int, int, int, int]
+    pyautogui_bbox: tuple[int, int, int, int]
+    device_idx: int
+    output_idx: int
+    output_name: str
+    output_rect: tuple[int, int, int, int]
+    dxcam_region: tuple[int, int, int, int]
+
+    @property
+    def width(self) -> int:
+        return self.visible_rect[2] - self.visible_rect[0]
+
+    @property
+    def height(self) -> int:
+        return self.visible_rect[3] - self.visible_rect[1]
+
+    @property
+    def output_width(self) -> int:
+        return self.output_rect[2] - self.output_rect[0]
+
+    @property
+    def output_height(self) -> int:
+        return self.output_rect[3] - self.output_rect[1]
+
+
+def _rect_area(rect: tuple[int, int, int, int]) -> int:
+    return max(0, rect[2] - rect[0]) * max(0, rect[3] - rect[1])
+
+
+def _rect_intersection(
+    first: tuple[int, int, int, int],
+    second: tuple[int, int, int, int],
+) -> tuple[int, int, int, int]:
+    return (
+        max(first[0], second[0]),
+        max(first[1], second[1]),
+        min(first[2], second[2]),
+        min(first[3], second[3]),
+    )
+
+
+def _window_rect(window) -> tuple[int, int, int, int]:
+    return (
+        int(round(window.left)),
+        int(round(window.top)),
+        int(round(window.right)),
+        int(round(window.bottom)),
+    )
+
+
+def _dxcam_outputs() -> list[dict]:
+    import dxcam as dxcam_module
+
+    factory = dxcam_module.__dict__.get("__factory")
+    if factory is None:
+        return []
+
+    outputs = []
+    for device_idx, device_outputs in enumerate(getattr(factory, "outputs", [])):
+        for output_idx, output in enumerate(device_outputs):
+            try:
+                output.update_desc()
+                coords = output.desc.DesktopCoordinates
+                rect = (
+                    int(coords.left),
+                    int(coords.top),
+                    int(coords.right),
+                    int(coords.bottom),
+                )
+                if _rect_area(rect) <= 0:
+                    continue
+                outputs.append(
+                    {
+                        "device_idx": int(device_idx),
+                        "output_idx": int(output_idx),
+                        "name": str(output.devicename),
+                        "rect": rect,
+                    }
+                )
+            except Exception:
+                continue
+    return outputs
+
+
+def _select_capture_target(window) -> CaptureTarget:
+    raw_rect = _window_rect(window)
+    outputs = _dxcam_outputs()
+    if not outputs:
+        screen_width, screen_height = pyautogui.size()
+        outputs = [
+            {
+                "device_idx": 0,
+                "output_idx": 0,
+                "name": "primary",
+                "rect": (0, 0, int(screen_width), int(screen_height)),
+            }
+        ]
+
+    best = None
+    best_visible = None
+    best_area = 0
+    for output in outputs:
+        visible = _rect_intersection(raw_rect, output["rect"])
+        area = _rect_area(visible)
+        if area > best_area:
+            best = output
+            best_visible = visible
+            best_area = area
+
+    if best is None or best_visible is None or best_area <= 0:
+        raise RuntimeError(
+            f"Could not find a visible monitor area for window rect {raw_rect}. "
+            "Move the game window onto the main screen and try again."
+        )
+
+    out_left, out_top, out_right, out_bottom = best["rect"]
+    local_region = (
+        max(0, best_visible[0] - out_left),
+        max(0, best_visible[1] - out_top),
+        min(out_right - out_left, best_visible[2] - out_left),
+        min(out_bottom - out_top, best_visible[3] - out_top),
+    )
+    if _rect_area(local_region) <= 0:
+        raise RuntimeError(f"Invalid normalized DXcam region {local_region} for window rect {raw_rect}.")
+
+    pyautogui_bbox = (
+        best_visible[0],
+        best_visible[1],
+        best_visible[2] - best_visible[0],
+        best_visible[3] - best_visible[1],
+    )
+    return CaptureTarget(
+        raw_window_rect=raw_rect,
+        visible_rect=best_visible,
+        pyautogui_bbox=pyautogui_bbox,
+        device_idx=best["device_idx"],
+        output_idx=best["output_idx"],
+        output_name=best["name"],
+        output_rect=best["rect"],
+        dxcam_region=local_region,
+    )
+
+
 class DxcamScreenshotBackend:
-    def __init__(self, region, size, fps):
-        import dxcam
-        self.camera = dxcam.create()
-        self.region = region
-        self.size = size
+    def __init__(self, target: CaptureTarget, fps):
+        self.target = target
+        self.camera = None
+        self.region = target.dxcam_region
+        self.crop_region = None
+        self.size = (target.width, target.height)
         self.last_screenshot = None
-        self.camera.start(region=self.region, target_fps=fps, video_mode=True)
+        self._start(fps)
+
+    def _start(self, fps):
+        import dxcam
+
+        full_output_region = (0, 0, self.target.output_width, self.target.output_height)
+        region_attempts = [
+            (self.region, None, "window region"),
+        ]
+        if self.region != full_output_region:
+            region_attempts.append((full_output_region, self.region, "full output with window crop"))
+
+        last_error = None
+        for backend in ("dxgi", "winrt"):
+            for processor_backend in ("cv2", "numpy"):
+                for start_region, crop_region, description in region_attempts:
+                    camera = None
+                    try:
+                        camera = dxcam.create(
+                            device_idx=self.target.device_idx,
+                            output_idx=self.target.output_idx,
+                            output_color="RGB",
+                            backend=backend,
+                            processor_backend=processor_backend,
+                        )
+                        camera.start(region=start_region, target_fps=fps, video_mode=True)
+                        self.camera = camera
+                        self.crop_region = crop_region
+                        print(
+                            "DXCAM started: "
+                            f"device={self.target.device_idx} output={self.target.output_idx} "
+                            f"{self.target.output_name} region={start_region} "
+                            f"mode={description} backend={backend}/{processor_backend}",
+                            flush=True,
+                        )
+                        return
+                    except Exception as exc:
+                        last_error = exc
+                        if camera is not None:
+                            try:
+                                camera.stop()
+                            except Exception:
+                                pass
+                            try:
+                                camera.release()
+                            except Exception:
+                                pass
+
+        raise RuntimeError(
+            "DXCAM failed after all capture attempts "
+            f"(output={self.target.output_name}, region={self.region}, last error={last_error})"
+        )
 
     def screenshot(self):
         screenshot = self.camera.get_latest_frame()
         if screenshot is None:
-            print("DXCAM failed to capture frame, trying to use the latest screenshot")
+            print("DXCAM failed to capture frame, trying to use the latest screenshot", flush=True)
             if self.last_screenshot is not None:
                 return self.last_screenshot
             else:
                 return Image.new("RGB", self.size, (0, 0, 0))
         screenshot = Image.fromarray(screenshot)
+        if self.crop_region is not None:
+            screenshot = screenshot.crop(self.crop_region)
         self.last_screenshot = screenshot
         return screenshot
 
     def close(self):
         try:
-            self.camera.stop()
+            if self.camera is not None:
+                self.camera.stop()
+        except Exception:
+            pass
+        try:
+            if self.camera is not None:
+                self.camera.release()
         except Exception:
             pass
 
 
 class AutoScreenshotBackend:
-    def __init__(self, dxcam_region, pyautogui_bbox, size, fps):
-        self.pyautogui_backend = PyautoguiScreenshotBackend(pyautogui_bbox)
+    def __init__(self, target: CaptureTarget, fps):
+        self.pyautogui_backend = PyautoguiScreenshotBackend(target.pyautogui_bbox)
         self.dxcam_backend = None
         self.active = "dxcam"
         self.previous_sample = None
@@ -489,9 +701,9 @@ class AutoScreenshotBackend:
         self.frozen_diff_threshold = 0.03
 
         try:
-            self.dxcam_backend = DxcamScreenshotBackend(dxcam_region, size, fps)
+            self.dxcam_backend = DxcamScreenshotBackend(target, fps)
         except Exception as exc:
-            print(f"DXCAM failed to start ({exc}); falling back to pyautogui.")
+            print(f"DXCAM failed to start ({exc}); falling back to pyautogui.", flush=True)
             self.active = "pyautogui"
 
     def _sample(self, image):
@@ -525,7 +737,7 @@ class AutoScreenshotBackend:
     def _fallback(self, reason):
         if self.active == "pyautogui":
             return
-        print(f"{reason}; falling back to pyautogui capture.")
+        print(f"{reason}; falling back to pyautogui capture.", flush=True)
         self.active = "pyautogui"
         if self.dxcam_backend is not None:
             self.dxcam_backend.close()
@@ -658,11 +870,21 @@ class GamepadEnv(Env):
             raise Exception(f"No window found with game name: {self.game}")
 
         self.game_window.activate()
-        l, t, r, b = self.game_window.left, self.game_window.top, self.game_window.right, self.game_window.bottom
-        width, height = r - l, b - t
-        self.bbox = (l, t, width, height)
-        self.dxcam_region = (l, t, r, b)
-        print(f"Capture region: left={l}, top={t}, width={width}, height={height}, backend={screenshot_backend}")
+        self.capture_target = _select_capture_target(self.game_window)
+        width, height = self.capture_target.width, self.capture_target.height
+        self.bbox = self.capture_target.pyautogui_bbox
+        self.dxcam_region = self.capture_target.dxcam_region
+        raw_l, raw_t, raw_r, raw_b = self.capture_target.raw_window_rect
+        vis_l, vis_t, vis_r, vis_b = self.capture_target.visible_rect
+        print(
+            "Capture region: "
+            f"raw_window=({raw_l},{raw_t},{raw_r},{raw_b}) "
+            f"visible=({vis_l},{vis_t},{vis_r},{vis_b}) "
+            f"dxcam_output={self.capture_target.output_name} "
+            f"dxcam_region={self.dxcam_region} "
+            f"width={width}, height={height}, backend={screenshot_backend}",
+            flush=True,
+        )
 
         self.speedhack_client = None
         if self.runtime_mode == "precision":
@@ -675,9 +897,9 @@ class GamepadEnv(Env):
 
         # Get the screenshot backend
         if screenshot_backend == "auto":
-            self.screenshot_backend = AutoScreenshotBackend(self.dxcam_region, self.bbox, (width, height), self.env_fps)
+            self.screenshot_backend = AutoScreenshotBackend(self.capture_target, self.env_fps)
         elif screenshot_backend == "dxcam":
-            self.screenshot_backend = DxcamScreenshotBackend(self.dxcam_region, (width, height), self.env_fps)
+            self.screenshot_backend = DxcamScreenshotBackend(self.capture_target, self.env_fps)
         elif screenshot_backend == "pyautogui":
             self.screenshot_backend = PyautoguiScreenshotBackend(self.bbox)
         else:

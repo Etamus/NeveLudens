@@ -17,6 +17,7 @@ from neveludens.inference_viz import create_viz, VideoRecorder
 from neveludens.inference_client import ModelClient
 from neveludens.supervisor import ObjectiveSupervisor
 from neveludens.fighting import FightingAssist
+from neveludens.multimodal_supervisor import AsyncMultimodalSupervisor
 from neveludens.stop_control import normalize_stop_file, raise_if_stop_requested
 
 import argparse
@@ -30,6 +31,7 @@ parser.add_argument("--runtime-mode", choices=["precision", "realtime"], default
 parser.add_argument("--output-mode", choices=["normal", "debug"], default="normal", help="Output mode")
 parser.add_argument("--game-mode", choices=["default", "fighting"], default="default", help="Game-specific optional mode")
 parser.add_argument("--agent-slot", choices=["auto", "player2"], default="auto", help="Agent controller slot preference")
+parser.add_argument("--multimodal-supervisor", choices=["disabled", "enabled"], default="disabled", help="Optional Qwen3.5 4B visual supervisor")
 recovery_group = parser.add_mutually_exclusive_group()
 recovery_group.add_argument("--smart-recovery", dest="smart_recovery", action="store_true", default=True, help="Enable temporal memory and anti-loop recovery")
 recovery_group.add_argument("--no-smart-recovery", dest="smart_recovery", action="store_false", help="Disable temporal memory and anti-loop recovery")
@@ -41,6 +43,7 @@ stop_file = normalize_stop_file(args.stop_file)
 menu_allowed = not args.block_menu
 
 env = None
+multimodal_supervisor = None
 _cleanup_done = False
 
 
@@ -53,6 +56,11 @@ def cleanup_environment():
     if _cleanup_done:
         return
     _cleanup_done = True
+    if multimodal_supervisor is not None:
+        try:
+            multimodal_supervisor.close()
+        except Exception:
+            pass
     if env is None:
         return
     try:
@@ -78,6 +86,7 @@ print(f"Modo de captura: {args.runtime_mode}")
 print(f"Saidas: {args.output_mode}")
 print(f"Modo de jogo: {args.game_mode}")
 print(f"Jogador do agente: {args.agent_slot}")
+print(f"Supervisor multimodal: {args.multimodal_supervisor}")
 print(f"Recuperacao inteligente: {'ligada' if args.smart_recovery else 'desligada'}")
 
 CKPT_NAME = Path(policy_info["ckpt_path"]).stem
@@ -128,6 +137,13 @@ fighting_assist = FightingAssist(
 )
 if fighting_assist.enabled:
     print("Modo jogo de luta ativado: movimento lateral, pulos e ritmo de ataque incentivados.")
+multimodal_supervisor = AsyncMultimodalSupervisor(
+    enabled=args.multimodal_supervisor == "enabled",
+    process_name=args.process,
+    game_mode=args.game_mode,
+)
+if args.multimodal_supervisor == "enabled":
+    print("Supervisor multimodal ativado: Qwen3.5 4B, bitsandbytes 4-bit, assincrono.")
 
 def preprocess_img(main_image):
     main_cv = cv2.cvtColor(np.array(main_image), cv2.COLOR_RGB2BGR)
@@ -262,7 +278,8 @@ with debug_recorder_context as debug_recorder:
         try:
             while True:
                 check_stop()
-                obs = preprocess_img(obs)
+                raw_obs = obs
+                obs = preprocess_img(raw_obs)
                 if debug_outputs:
                     obs.save(PATH_DEBUG / f"{step_count:05d}.png")
                 perception_state = supervisor.observe(obs, step_count)
@@ -305,9 +322,21 @@ with debug_recorder_context as debug_recorder:
                 if decision.reasons:
                     print(f"Supervisor[{decision.profile}/{decision.objective}]: {'; '.join(decision.reasons)}")
 
+                multimodal_supervisor.submit(
+                    raw_obs,
+                    perception_state,
+                    decision.memory,
+                    decision.profile,
+                    step_count,
+                )
+
                 fighting_decision = fighting_assist.apply(env_actions, perception_state, step_count, obs)
                 if fighting_decision.reasons:
                     print(f"Fighting[{fighting_decision.changed_actions}]: {'; '.join(fighting_decision.reasons)}")
+
+                multimodal_reasons = multimodal_supervisor.apply(env_actions)
+                if multimodal_reasons:
+                    print(f"Supervisor multimodal: {'; '.join(multimodal_reasons)}")
 
                 if debug_outputs:
                     print(f"Executing {len(env_actions)} actions, each action will be repeated {action_downsample_ratio} times")
