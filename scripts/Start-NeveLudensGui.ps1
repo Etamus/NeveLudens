@@ -364,7 +364,7 @@ $xaml = @"
                                 <TextBlock Text="Saída de depuração:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="OutputModeCombo">
                                     <ComboBoxItem Content="Normal" Tag="normal" IsSelected="True"/>
-                                    <ComboBoxItem Content="Debug" Tag="debug"/>
+                                    <ComboBoxItem Content="Detalhado" Tag="debug"/>
                                 </ComboBox>
                             </StackPanel>
 
@@ -372,7 +372,8 @@ $xaml = @"
                                 <TextBlock Text="Modo de jogo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="GameModeCombo">
                                     <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
-                                    <ComboBoxItem Content="Jogo de luta" Tag="fighting"/>
+                                    <ComboBoxItem Content="Luta" Tag="fighting"/>
+                                    <ComboBoxItem Content="Tela dividida" Tag="split_screen"/>
                                 </ComboBox>
                             </StackPanel>
 
@@ -380,7 +381,8 @@ $xaml = @"
                                 <TextBlock Text="Jogador do agente:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="AgentSlotCombo">
                                     <ComboBoxItem Content="Automático" Tag="auto" IsSelected="True"/>
-                                    <ComboBoxItem Content="Player 2" Tag="player2"/>
+                                    <ComboBoxItem Content="Jogador 2" Tag="player2"/>
+                                    <ComboBoxItem Content="Jogador 2 (Co-op)" Tag="player2_coop"/>
                                 </ComboBox>
                             </StackPanel>
 
@@ -392,12 +394,14 @@ $xaml = @"
                                 </ComboBox>
                             </StackPanel>
 
-                            <StackPanel Grid.Row="4" Grid.Column="2" Grid.ColumnSpan="3" Orientation="Horizontal" VerticalAlignment="Center">
+                            <WrapPanel Grid.Row="4" Grid.Column="2" Grid.ColumnSpan="3" VerticalAlignment="Center">
                                 <CheckBox x:Name="SmartRecoveryCheck" Content="Recuperação inteligente" IsChecked="True"
-                                          Style="{StaticResource ToggleCheck}" Margin="0,0,28,0"/>
-                                <CheckBox x:Name="MenuActionsCheck" Content="Permitir acesso de menus" IsChecked="True"
-                                          Style="{StaticResource ToggleCheck}"/>
-                            </StackPanel>
+                                          Style="{StaticResource ToggleCheck}" Margin="0,0,18,0"/>
+                                <CheckBox x:Name="AdvancedMemoryCheck" Content="Memória avançada" IsChecked="False"
+                                          Style="{StaticResource ToggleCheck}" Margin="0,0,18,0"/>
+                                <CheckBox x:Name="MenuActionsCheck" Content="Permitir acesso aos menus" IsChecked="False"
+                                          Style="{StaticResource ToggleCheck}" Margin="0,8,0,0"/>
+                            </WrapPanel>
                         </Grid>
                     </Border>
                 </StackPanel>
@@ -446,6 +450,7 @@ $OutputModeCombo = $window.FindName("OutputModeCombo")
 $GameModeCombo = $window.FindName("GameModeCombo")
 $AgentSlotCombo = $window.FindName("AgentSlotCombo")
 $MultimodalSupervisorCombo = $window.FindName("MultimodalSupervisorCombo")
+$AdvancedMemoryCheck = $window.FindName("AdvancedMemoryCheck")
 $SmartRecoveryCheck = $window.FindName("SmartRecoveryCheck")
 $RefreshButton = $window.FindName("RefreshButton")
 $StartButton = $window.FindName("StartButton")
@@ -612,6 +617,10 @@ function Get-MultimodalSupervisorMode {
 
 function Get-SmartRecoveryEnabled {
     return [bool]$SmartRecoveryCheck.IsChecked
+}
+
+function Get-AdvancedMemoryEnabled {
+    return [bool]$AdvancedMemoryCheck.IsChecked
 }
 
 function Set-RunButtonState {
@@ -820,6 +829,9 @@ $StartButton.Add_Click({
             $launchArgs += "--smart-recovery"
         } else {
             $launchArgs += "--no-smart-recovery"
+        }
+        if (Get-AdvancedMemoryEnabled) {
+            $launchArgs += "--advanced-memory"
         }
         if (Get-AllowMenuActions) {
             $launchArgs += "--allow-menu"

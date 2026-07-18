@@ -48,21 +48,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--game-mode",
-        choices=["default", "fighting"],
+        choices=["default", "fighting", "split_screen"],
         default="default",
         help="Optional game-specific mode. Default does not alter model actions.",
     )
     parser.add_argument(
         "--agent-slot",
-        choices=["auto", "player2"],
+        choices=["auto", "player2", "player2_coop"],
         default="auto",
-        help="Controller slot preference. 'auto' keeps current behavior; 'player2' tries to make the agent the second player.",
+        help=(
+            "Controller slot preference. 'auto' keeps current behavior; "
+            "'player2' tries to make the agent the second player; "
+            "'player2_coop' uses the same slot behavior with a co-op join macro."
+        ),
     )
     parser.add_argument(
         "--multimodal-supervisor",
         choices=["disabled", "enabled"],
         default="disabled",
         help="Optional Qwen3.5 4B visual supervisor. Disabled keeps the original behavior.",
+    )
+    parser.add_argument(
+        "--advanced-memory",
+        action="store_true",
+        default=False,
+        help="Enable opt-in visual/place/result/per-game memory and VLM summary.",
     )
     recovery_group = parser.add_mutually_exclusive_group()
     recovery_group.add_argument(
@@ -83,7 +93,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--allow-menu",
         dest="allow_menu",
         action="store_true",
-        default=True,
+        default=False,
         help="Allow START/BACK/GUIDE actions.",
     )
     menu_group.add_argument(
@@ -164,7 +174,7 @@ def preflight(agent_slot: str = "auto", multimodal_supervisor: str = "disabled")
             "PyTorch não encontrou CUDA. O NeveLudens atual exige GPU NVIDIA com CUDA."
         )
 
-    if agent_slot == "player2":
+    if agent_slot in {"player2", "player2_coop"}:
         print("Controle virtual: validacao adiada para preservar a ordem de Player 2")
     else:
         # Create and release one virtual controller to catch driver problems early.
@@ -173,7 +183,7 @@ def preflight(agent_slot: str = "auto", multimodal_supervisor: str = "disabled")
         gamepad.update()
 
     print(f"CUDA OK: {torch.cuda.get_device_name(0)}")
-    if agent_slot != "player2":
+    if agent_slot not in {"player2", "player2_coop"}:
         print("Controle virtual OK")
     if multimodal_supervisor == "enabled":
         missing = [
@@ -437,6 +447,7 @@ def run_player(
     game_mode: str,
     agent_slot: str,
     multimodal_supervisor: str,
+    advanced_memory: bool,
     smart_recovery: bool,
     special_init: bool,
     stop_file: Path | None,
@@ -462,6 +473,8 @@ def run_player(
         "--multimodal-supervisor",
         multimodal_supervisor,
     ]
+    if advanced_memory:
+        cmd.append("--advanced-memory")
     if stop_file is not None:
         cmd.extend(["--stop-file", str(stop_file)])
     if smart_recovery:
@@ -527,6 +540,7 @@ def main(argv: list[str] | None = None) -> int:
     game_mode = args.game_mode
     agent_slot = args.agent_slot
     multimodal_supervisor = args.multimodal_supervisor
+    advanced_memory = args.advanced_memory
     smart_recovery = args.smart_recovery
     special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init
     if special_init:
@@ -541,6 +555,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Modo de jogo: {game_mode}")
     print(f"Jogador do agente: {agent_slot}")
     print(f"Supervisor multimodal: {multimodal_supervisor}")
+    print(f"Memoria avancada: {'ligada' if advanced_memory else 'desligada'}")
     print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
     print(f"Porta do servidor: {args.port}")
     port = args.port
@@ -570,6 +585,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Modo de jogo: {game_mode}")
     print(f"Jogador do agente: {agent_slot}")
     print(f"Supervisor multimodal: {multimodal_supervisor}")
+    print(f"Memoria avancada: {'ligada' if advanced_memory else 'desligada'}")
     print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
     print(f"Ações de menu: {'liberadas' if allow_menu else 'bloqueadas'}")
 
@@ -582,6 +598,7 @@ def main(argv: list[str] | None = None) -> int:
         "game_mode": game_mode,
         "agent_slot": agent_slot,
         "multimodal_supervisor": multimodal_supervisor,
+        "advanced_memory": advanced_memory,
         "smart_recovery": smart_recovery,
         "special_init": special_init,
         "port": port,
@@ -599,6 +616,7 @@ def main(argv: list[str] | None = None) -> int:
             game_mode,
             agent_slot,
             multimodal_supervisor,
+            advanced_memory,
             smart_recovery,
             special_init,
             stop_file,

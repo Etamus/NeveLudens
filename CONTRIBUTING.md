@@ -97,8 +97,6 @@ Antes de enviar uma pull request, rode pelo menos o que fizer sentido para sua a
 
 Se mexer no `iniciar.bat` ou na interface WPF, abra a interface e confira:
 
-- botão de minimizar;
-- botão de fechar;
 - diagnóstico de captura;
 - botão único `Iniciar`/`Parar`;
 - log sem barra horizontal;

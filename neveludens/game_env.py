@@ -222,15 +222,15 @@ class GamepadEmulator:
         Parameters:
         controller_type (str): The type of controller to emulate ("xbox" or "ps4").
         system (str): The operating system to use, which affects joystick value handling.
-        agent_slot (str): "auto" keeps the original behavior. "player2" tries to
-                          make the agent the second controller.
+        agent_slot (str): "auto" keeps the original behavior. "player2" and
+                          "player2_coop" try to make the agent the second controller.
         """
         self.controller_type = controller_type
         self.system = system
         self.agent_slot = agent_slot
         self.slot_guard = None
 
-        if agent_slot == "player2":
+        if agent_slot in {"player2", "player2_coop"}:
             self._prepare_player2_slot()
 
         self.gamepad = self._create_virtual_gamepad()
@@ -798,7 +798,7 @@ class GamepadEnv(Env):
         assert controller_type in ["xbox", "ps4"], "Platform must be either 'xbox' or 'ps4'"
         assert screenshot_backend in ["auto", "pyautogui", "dxcam"], "Screenshot backend must be 'auto', 'pyautogui', or 'dxcam'"
         assert runtime_mode in ["precision", "realtime"], "Runtime mode must be 'precision' or 'realtime'"
-        assert agent_slot in ["auto", "player2"], "Agent slot must be 'auto' or 'player2'"
+        assert agent_slot in ["auto", "player2", "player2_coop"], "Agent slot must be 'auto', 'player2', or 'player2_coop'"
 
         self.game = game
         self.image_height = int(image_height)

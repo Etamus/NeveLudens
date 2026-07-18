@@ -14,7 +14,7 @@ NeveLudens funciona como um piloto visual local para jogos. Ele combina um model
 
 O produto atual entrega:
 
-- Interface gráfica WPF para iniciar o agente sem usar terminal.
+- Interface gráfica WPF local para iniciar o agente sem usar terminal.
 - Instalador CMD para preparar dependências dentro da pasta do projeto.
 - Pipeline local de captura, inferência, supervisão e controle virtual.
 - Diagnóstico de captura para investigar tela preta, congelada ou janela incorreta.
@@ -38,17 +38,18 @@ Na prática, o NeveLudens é indicado para pesquisa, experimentação, prototipa
 
 ### `iniciar.bat`
 
-Abre a interface principal em WPF. Por ela você pode:
+Abre a interface principal em WPF. O `iniciar.bat` chama a GUI local por PowerShell; por ela você pode:
 
 - Selecionar uma janela de jogo detectada.
 - Digitar manualmente o nome do `.exe`.
 - Escolher a captura: `auto`, `dxcam` ou `pyautogui`.
 - Escolher o modo de captura: `Precisão` ou `Tempo real`.
 - Escolher a saída de depuração: `Normal` ou `Debug`.
-- Escolher o modo de jogo: `Padrão` ou `Jogo de luta`.
-- Escolher o jogador do agente: `Automático` ou `Player 2`.
+- Escolher o modo de jogo: `Padrão`, `Jogo de luta` ou `Tela dividida`.
+- Escolher o jogador do agente: `Automático`, `Player 2` ou `Jogador 2 (Co-op)`.
 - Escolher o supervisor multimodal: `Desativado` ou `Ativado`.
 - Ligar ou desligar a recuperação inteligente.
+- Ligar ou desligar a memória avançada.
 - Ativar ou desativar **Permitir acesso de menus**, que controla `START`, `BACK` e `GUIDE`.
 - Iniciar e parar o agente.
 - Rodar diagnóstico de captura.
@@ -57,7 +58,7 @@ Abre a interface principal em WPF. Por ela você pode:
 Padrões atuais:
 
 - Porta do servidor: `5555`.
-- Permitir acesso de menus: ligado por padrão.
+- Permitir acesso de menus: desligado por padrão.
 - Captura recomendada: `auto`.
 - Modo de captura padrão: `Precisão`.
 - Saída de depuração padrão: `Normal`.
@@ -65,6 +66,7 @@ Padrões atuais:
 - Jogador do agente padrão: `Automático`, mantendo o comportamento atual.
 - Supervisor multimodal padrão: `Desativado`, mantendo o comportamento atual.
 - Recuperação inteligente: ligada por padrão.
+- Memória avançada: desligada por padrão, mantendo o comportamento atual.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
 Modos de captura:
@@ -81,11 +83,13 @@ Modo de jogo:
 
 - `Padrão`: não adiciona nenhuma camada específica de gênero.
 - `Jogo de luta`: ativa uma camada opcional simples que incentiva mais movimento lateral, pulos e golpes ritmados. Ela não tenta entender o lado do personagem nem substituir a IA base.
+- `Tela dividida`: envia ao modelo e ao Supervisor multimodal somente a metade esquerda da tela. Não adiciona lógica de perseguição, rota ou alvo; apenas mantém inputs de movimento mais contínuos e aplica um escape curto quando a tela parece travada. Botões de ação, ataque, interação e menu continuam livres.
 
 Jogador do agente:
 
 - `Automático`: comportamento atual. O jogo decide a posição do controle virtual conforme a ordem de dispositivos.
 - `Player 2`: tenta fazer a IA entrar como segundo jogador. Primeiro aguarda o jogador humano assumir o Player 1; se nenhum controle XInput existir, cria um controle virtual parado para reservar o primeiro slot e depois cria o controle ativo da IA. Após acordar o controle, move para a direita e confirma com `SOUTH`/A para ajudar em telas de escolha de lado.
+- `Jogador 2 (Co-op)`: usa a mesma reserva de slot do `Player 2`, mas a macro inicial confirma primeiro, espera 5 segundos, move para a esquerda, confirma de novo e espera mais 5 segundos. É uma variação para telas de entrada co-op.
 
 Supervisor multimodal:
 
@@ -100,6 +104,14 @@ Recuperação inteligente:
 - Une memória temporal e anti-loop em uma única opção.
 - Quando ligada, guarda os últimos frames resumidos, ações e eventos para saber se a tela está parada ou se a IA repetiu o mesmo comando.
 - Quando detecta travamento ou repetição forte, permite acionar skills de recuperação conforme o perfil interno do jogo.
+
+Memória avançada:
+
+- Desligada por padrão. Quando desligada, não carrega, salva nem altera nada.
+- Quando ligada, cria memória visual curta, memória de lugares, memória de resultado, memória por jogo e resumo compacto para a VLM.
+- Salva dados por processo em `memories/<jogo>.json`.
+- Pode aplicar uma tentativa curta de rota alternativa apenas quando detecta loop visual claro ou vários passos sem progresso.
+- Se o Supervisor multimodal estiver ligado, envia um resumo compacto para a VLM evitar repetir a última tentativa ruim.
 
 ### `instalar.bat`
 
@@ -160,6 +172,12 @@ Esses números ajudam a definir expectativas. O modelo generalista não tem o me
 ### Recuperação inteligente
 
 `neveludens/memory.py` guarda histórico curto de frames, ações e eventos. Esse histórico alimenta o anti-loop e as skills de recuperação. Na interface, memória temporal e anti-loop aparecem juntos como **Recuperação inteligente**.
+
+### Memória avançada
+
+`neveludens/advanced_memory.py` é uma camada opcional e persistente. Ela reconhece imagens parecidas por hash visual, agrupa lugares visitados, registra quais padrões de ação deram progresso ou não e salva um arquivo por jogo em `memories/`.
+
+Quando ligada junto do Supervisor multimodal, ela envia um resumo curto para a VLM com sinais como "mesmo lugar há muitos passos", "última ação não mudou a cena" e "área vista recentemente". Isso ajuda a VLM orientar uma rota diferente sem receber uma lista enorme de prints antigos.
 
 ### Supervisor de objetivos
 
@@ -246,11 +264,12 @@ Pastas usadas:
 5. Deixe a captura em `auto`.
 6. Deixe o modo de captura em **Precisão** ou escolha **Tempo real**.
 7. Deixe a saída de depuração em **Normal** ou escolha **Debug** para gravar PNG/vídeos/logs detalhados.
-8. Deixe o modo de jogo em **Padrão**, ou escolha **Jogo de luta** para Street Fighter 6.
-9. Deixe o jogador do agente em **Automático**, ou escolha **Player 2** quando quiser que a IA tente entrar como segundo jogador.
+8. Deixe o modo de jogo em **Padrão**, escolha **Jogo de luta** para Street Fighter 6 ou **Tela dividida** para jogos co-op/split-screen em que a IA deve enxergar apenas a metade esquerda da tela.
+9. Deixe o jogador do agente em **Automático**, escolha **Player 2** para entrada lateral padrão ou **Jogador 2 (Co-op)** para a macro de confirmação/esquerda/confirmação.
 10. Deixe **Recuperação inteligente** ligada para usar memória temporal e anti-loop juntos.
-11. Clique em **Iniciar**.
-12. Para parar, clique em **Parar** no mesmo botão.
+11. Deixe **Memória avançada** desligada para manter o padrão, ou ligue quando quiser memória visual/persistente por jogo.
+12. Clique em **Iniciar**.
+13. Para parar, clique em **Parar** no mesmo botão.
 
 Se o agente parecer cego, vendo tela preta ou reagindo a uma imagem congelada, use **Diagnosticar** na própria interface.
 
@@ -260,6 +279,7 @@ Se o agente parecer cego, vendo tela preta ou reagindo a uma imagem congelada, u
 - `out/<modelo>/*_CLEAN.mp4`: vídeo limpo da captura, salvo apenas no modo `Debug`.
 - `out/<modelo>/*_ACTIONS.json`: ações finais enviadas ao jogo, salvo apenas no modo `Debug`.
 - `out/<modelo>/*_SUPERVISOR.json`: percepção, memória, objetivo e skill usada, salvo apenas no modo `Debug`.
+- `memories/<jogo>.json`: memória avançada persistente por processo, criada apenas quando **Memória avançada** está ligada.
 - `logs/server_*.log`: carregamento do modelo e servidor.
 - `logs/gui_run_*.log`: log espelho da interface de início.
 

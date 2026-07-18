@@ -30,6 +30,7 @@ models/*.safetensors
 debug/
 out/
 logs/
+memories/
 
 # Config local do usuario
 neveludens_local_config.json
