@@ -24,10 +24,20 @@ def find_window(process_name: str):
 
     proc_info = get_process_info(process_name)
     window_name = proc_info["window_name"]
+    window_hwnd = proc_info.get("hwnd")
     for window in pwc.getAllWindows():
-        if window.title == window_name:
+        try:
+            hwnd = window.getHandle()
+        except Exception:
+            hwnd = getattr(window, "_hWnd", None)
+        if window_hwnd and hwnd and int(hwnd) == int(window_hwnd):
             return window
-    raise RuntimeError(f"Não encontrei janela visível para {process_name}.")
+        if not window_hwnd and window.title == window_name:
+            return window
+    raise RuntimeError(
+        f"Nao encontrei janela visivel para {process_name} "
+        f"(PID: {proc_info.get('pid')}, hwnd: {window_hwnd}, titulo: {window_name})."
+    )
 
 
 def stats(image: Image.Image) -> tuple[tuple[float, float, float], bool]:
@@ -60,7 +70,7 @@ def save_capture(process_name: str, backend: str) -> Path:
     time.sleep(0.3)
     target = _select_capture_target(window)
     print(
-        "Região de captura: "
+        "Regiao de captura: "
         f"janela={target.raw_window_rect} visivel={target.visible_rect} "
         f"dxcam={target.dxcam_region} monitor={target.output_name}"
     )

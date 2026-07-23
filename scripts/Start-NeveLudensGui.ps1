@@ -303,9 +303,6 @@ $xaml = @"
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0">
-                    <TextBlock Text="Jogo" FontSize="22" FontWeight="SemiBold" Foreground="#111111"/>
-                    <TextBlock Text="Escolha o processo e configure a execução." FontSize="13" Foreground="#71717A" Margin="0,4,0,16"/>
-
                     <Border Style="{StaticResource Card}">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -313,6 +310,8 @@ $xaml = @"
                                 <RowDefinition Height="16"/>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="16"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="14"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
@@ -394,7 +393,17 @@ $xaml = @"
                                 </ComboBox>
                             </StackPanel>
 
-                            <WrapPanel Grid.Row="4" Grid.Column="2" Grid.ColumnSpan="3" VerticalAlignment="Center">
+                            <StackPanel Grid.Row="4" Grid.Column="2" Margin="0,0,12,0">
+                                <TextBlock Text="Modelo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="ModelCombo">
+                                    <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
+                                    <ComboBoxItem Content="Sonic 3" Tag="sonic3"/>
+                                    <ComboBoxItem Content="Pizza Tower" Tag="pizza_tower"/>
+                                    <ComboBoxItem Content="Pizza Tower Fast" Tag="pizza_tower_fast"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <WrapPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="5" VerticalAlignment="Center">
                                 <CheckBox x:Name="SmartRecoveryCheck" Content="Recuperação inteligente" IsChecked="True"
                                           Style="{StaticResource ToggleCheck}" Margin="0,0,18,0"/>
                                 <CheckBox x:Name="AdvancedMemoryCheck" Content="Memória avançada" IsChecked="False"
@@ -411,10 +420,6 @@ $xaml = @"
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Margin="0,0,0,16">
-                        <TextBlock Text="Execução" FontSize="22" FontWeight="SemiBold" Foreground="#111111"/>
-                        <TextBlock Text="Acompanhe o log de execução." FontSize="13" Foreground="#71717A" Margin="0,4,0,0"/>
-                    </StackPanel>
 
                     <Border Grid.Row="1" Background="#0A0A0A" CornerRadius="10" Padding="14,12">
                         <TextBox x:Name="LogBox" Background="Transparent" Foreground="#D4D4D4" BorderThickness="0"
@@ -450,6 +455,7 @@ $OutputModeCombo = $window.FindName("OutputModeCombo")
 $GameModeCombo = $window.FindName("GameModeCombo")
 $AgentSlotCombo = $window.FindName("AgentSlotCombo")
 $MultimodalSupervisorCombo = $window.FindName("MultimodalSupervisorCombo")
+$ModelCombo = $window.FindName("ModelCombo")
 $AdvancedMemoryCheck = $window.FindName("AdvancedMemoryCheck")
 $SmartRecoveryCheck = $window.FindName("SmartRecoveryCheck")
 $RefreshButton = $window.FindName("RefreshButton")
@@ -613,6 +619,14 @@ function Get-MultimodalSupervisorMode {
         return [string]$selected.Tag
     }
     return "disabled"
+}
+
+function Get-ModelChoice {
+    $selected = $ModelCombo.SelectedItem
+    if ($selected -and $selected.Tag) {
+        return [string]$selected.Tag
+    }
+    return "default"
 }
 
 function Get-SmartRecoveryEnabled {
@@ -820,6 +834,7 @@ $StartButton.Add_Click({
             "--runtime-mode", (Get-RuntimeMode),
             "--output-mode", (Get-OutputMode),
             "--game-mode", (Get-GameMode),
+            "--model-choice", (Get-ModelChoice),
             "--agent-slot", (Get-AgentSlot),
             "--multimodal-supervisor", (Get-MultimodalSupervisorMode),
             "--port", "5555",

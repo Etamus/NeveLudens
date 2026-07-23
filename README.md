@@ -85,6 +85,14 @@ Modo de jogo:
 - `Jogo de luta`: ativa uma camada opcional simples que incentiva mais movimento lateral, pulos e golpes ritmados. Ela não tenta entender o lado do personagem nem substituir a IA base.
 - `Tela dividida`: envia ao modelo e ao Supervisor multimodal somente a metade esquerda da tela. Não adiciona lógica de perseguição, rota ou alvo; apenas mantém inputs de movimento mais contínuos e aplica um escape curto quando a tela parece travada. Botões de ação, ataque, interação e menu continuam livres.
 
+Modelo:
+
+- `Padrão`: usa `models/ng.pt`, o mesmo checkpoint atual do NeveLudens.
+- `Sonic 3`: usa `BotGoesBrrr/nitrogen-sonic3-ft/ng.pt`, salvo em `models/sonic3/ng.pt`.
+- `Pizza Tower`: usa `subbonan/nitrogen-pizza-tower-finetune/final_model.pt`, salvo em `models/pizza_tower/final_model.pt`.
+- `Pizza Tower Fast`: usa `subbonan/nitrogen-pizza-tower-finetune/final_model_35.pt`, salvo em `models/pizza_tower/final_model_35.pt`.
+- Os modelos alternativos são baixados automaticamente no primeiro uso. O modelo `Padrão` não é sobrescrito.
+
 Jogador do agente:
 
 - `Automático`: comportamento atual. O jogo decide a posição do controle virtual conforme a ordem de dispositivos.
@@ -126,6 +134,7 @@ Roda um instalador CMD normal. Ele prepara o projeto para uso local:
 - Mantém caches em `.cache`.
 - Ajusta PyTorch CUDA na `.venv`.
 - Baixa `models/ng.pt` quando necessário.
+- Modelos alternativos de `iniciar.bat` são baixados separadamente no primeiro uso.
 - Valida importações, CUDA e controle virtual.
 
 Nada é instalado globalmente pelo `pip`.
@@ -250,7 +259,9 @@ Pastas usadas:
 
 - `.venv`: ambiente Python local.
 - `.cache`: caches locais de pip, Hugging Face, Transformers e Torch.
-- `models/ng.pt`: checkpoint do modelo.
+- `models/ng.pt`: checkpoint padrão do modelo.
+- `models/sonic3/ng.pt`: checkpoint alternativo de Sonic 3, baixado no primeiro uso.
+- `models/pizza_tower/*.pt`: checkpoints alternativos de Pizza Tower, baixados no primeiro uso.
 - `logs`: logs de servidor, interface e instalação.
 - `out`: vídeos, ações e logs do supervisor.
 - `debug`: capturas de diagnóstico e frames.

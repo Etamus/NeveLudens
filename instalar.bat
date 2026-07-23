@@ -6,7 +6,6 @@ cd /d "%~dp0"
 
 set "ROOT=%CD%"
 set "VENV_PY=%ROOT%\.venv\Scripts\python.exe"
-set "HF_EXE=%ROOT%\.venv\Scripts\hf.exe"
 set "MODEL_PATH=%ROOT%\models\ng.pt"
 set "PYTHON_CMD="
 
@@ -89,11 +88,7 @@ call :step "5. Checkpoint do modelo"
 if exist "%MODEL_PATH%" (
     echo Modelo ja existe: %MODEL_PATH%
 ) else (
-    if not exist "%HF_EXE%" (
-        echo ERRO: hf.exe nao foi encontrado na .venv.
-        exit /b 1
-    )
-    call :run "%HF_EXE%" download "nvidia/NitroGen" ng.pt --local-dir models
+    call :download_default_model
     if errorlevel 1 exit /b 1
 )
 
@@ -243,6 +238,10 @@ if exist "%VENV_PY%" (
     call :run "%VENV_PY%" -c "import torch, neveludens; print('torch:', torch.__version__); print('CUDA disponivel:', torch.cuda.is_available())"
 )
 exit /b 0
+
+:download_default_model
+call :run "%VENV_PY%" -c "from pathlib import Path; from huggingface_hub import snapshot_download; root=Path(r'%ROOT%'); target=root/'models'/'ng.pt'; snapshot_download(repo_id='nvidia/NitroGen', allow_patterns=['ng.pt'], local_dir=root/'models', cache_dir=root/'.cache'/'huggingface'/'hub', max_workers=1); raise SystemExit(0 if target.exists() and target.stat().st_size > 0 else 1)"
+exit /b %ERRORLEVEL%
 
 :step
 echo.

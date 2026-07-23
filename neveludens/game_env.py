@@ -85,6 +85,30 @@ def get_process_info(process_name):
               for each matching process. Returns empty list if no process found.
     """
     results = []
+    proxy_keywords = ['d3dproxywindow', 'proxy', 'helper', 'overlay', 'crash', 'cef', 'webview']
+
+    def window_area(hwnd):
+        try:
+            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        except Exception:
+            return 0
+        return max(0, right - left) * max(0, bottom - top)
+
+    def score_window(window):
+        title = str(window.get("title", "")).lower()
+        area = int(window.get("area", 0))
+        score = 0
+        if window.get("visible"):
+            score += 100
+        if not window.get("iconic"):
+            score += 35
+        if area > 0:
+            score += min(80, area // 12000)
+        if any(keyword in title for keyword in proxy_keywords):
+            score -= 80
+        if process_name.rsplit(".", 1)[0].lower() in title:
+            score += 8
+        return score
 
     # Find all processes with the given name
     for proc in psutil.process_iter(['pid', 'name']):
@@ -108,18 +132,25 @@ def get_process_info(process_name):
                 except:
                     architecture = "unknown"
 
-                # Find windows associated with this PID
+                # Find visible windows associated with this PID. Some games spawn
+                # multiple same-name helper processes; prefer the process that
+                # owns an actual game-sized window.
                 windows = []
 
                 def enum_window_callback(hwnd, pid_to_find):
                     _, found_pid = win32process.GetWindowThreadProcessId(hwnd)
                     if found_pid == pid_to_find:
-                        window_text = win32gui.GetWindowText(hwnd)
-                        if window_text and win32gui.IsWindowVisible(hwnd):
+                        window_text = win32gui.GetWindowText(hwnd).strip()
+                        visible = bool(win32gui.IsWindowVisible(hwnd))
+                        area = window_area(hwnd)
+                        if visible and area > 0:
                             windows.append({
                                 'hwnd': hwnd,
                                 'title': window_text,
-                                'visible': win32gui.IsWindowVisible(hwnd)
+                                'visible': visible,
+                                'iconic': bool(win32gui.IsIconic(hwnd)),
+                                'area': area,
+                                'score': 0,
                             })
                     return True
 
@@ -131,26 +162,28 @@ def get_process_info(process_name):
 
                 # Choose the best window
                 window_name = None
+                window_hwnd = None
+                window_score = 0
+                window_area_value = 0
                 if windows:
                     if len(windows) > 1:
                         print(f"Multiple windows found for PID {pid}: {[win['title'] for win in windows]}")
                         print("Using heuristics to select the correct window...")
-                    # Filter out common proxy/helper windows
-                    proxy_keywords = ['d3dproxywindow', 'proxy', 'helper', 'overlay']
-
-                    # First try to find a visible window without proxy keywords
                     for win in windows:
-                        if not any(keyword in win['title'].lower() for keyword in proxy_keywords):
-                            window_name = win['title']
-                            break
-
-                    # If no good window found, just use the first one
-                    if window_name is None and windows:
-                        window_name = windows[0]['title']
+                        win['score'] = score_window(win)
+                    windows.sort(key=lambda win: (win['score'], win['area']), reverse=True)
+                    selected = windows[0]
+                    window_name = selected['title']
+                    window_hwnd = selected['hwnd']
+                    window_score = selected['score']
+                    window_area_value = selected['area']
 
                 results.append({
                     'pid': pid,
                     'window_name': window_name,
+                    'hwnd': window_hwnd,
+                    'window_score': window_score,
+                    'window_area': window_area_value,
                     'architecture': architecture
                 })
 
@@ -159,10 +192,31 @@ def get_process_info(process_name):
 
     if len(results) == 0:
         raise ValueError(f"No process found with name: {process_name}")
-    elif len(results) > 1:
-        print(f"Warning: Multiple processes found with name '{process_name}'. Returning first match.")
+    windowed_results = [result for result in results if result.get('hwnd')]
+    if not windowed_results:
+        pids = ", ".join(str(result["pid"]) for result in results)
+        raise ValueError(
+            f"Process '{process_name}' is running (PID(s): {pids}), but no visible game window was found. "
+            "Restore the game window, wait past launch/loading helpers, and avoid selecting a launcher/background process."
+        )
 
-    return results[0]
+    windowed_results.sort(
+        key=lambda result: (int(result.get('window_score') or 0), int(result.get('window_area') or 0)),
+        reverse=True,
+    )
+    selected = windowed_results[0]
+    if len(results) > 1:
+        summary = ", ".join(
+            f"PID {item['pid']} window={item.get('window_name') or 'None'}"
+            for item in results
+        )
+        print(f"Warning: Multiple processes found with name '{process_name}': {summary}")
+        print(
+            "Selected process with visible window: "
+            f"PID {selected['pid']} ({selected.get('window_name') or 'sem titulo'})"
+        )
+
+    return selected
 
 
 XBOX_MAPPING = {
@@ -820,6 +874,7 @@ class GamepadEnv(Env):
         self.game_pid = proc_info["pid"]
         self.game_arch = proc_info["architecture"]
         self.game_window_name = proc_info["window_name"]
+        self.game_window_hwnd = proc_info.get("hwnd")
 
         print(
             f"Game process found: {self.game} (PID: {self.game_pid}, Arch: {self.game_arch}, Window: {self.game_window_name})")
@@ -861,13 +916,27 @@ class GamepadEnv(Env):
         # Determine window name
         windows = pwc.getAllWindows()
         self.game_window = None
-        for window in windows:
-            if window.title == self.game_window_name:
-                self.game_window = window
-                break
+        if self.game_window_hwnd:
+            for window in windows:
+                try:
+                    hwnd = window.getHandle()
+                except Exception:
+                    hwnd = getattr(window, "_hWnd", None)
+                if hwnd and int(hwnd) == int(self.game_window_hwnd):
+                    self.game_window = window
+                    break
+
+        if not self.game_window and self.game_window_name:
+            for window in windows:
+                if window.title == self.game_window_name:
+                    self.game_window = window
+                    break
 
         if not self.game_window:
-            raise Exception(f"No window found with game name: {self.game}")
+            raise Exception(
+                f"No visible window found for {self.game} "
+                f"(selected PID: {self.game_pid}, hwnd: {self.game_window_hwnd}, title: {self.game_window_name})"
+            )
 
         self.game_window.activate()
         self.capture_target = _select_capture_target(self.game_window)

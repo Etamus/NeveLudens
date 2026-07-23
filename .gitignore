@@ -22,9 +22,13 @@ models/.cache/
 
 # Checkpoints/modelos pesados
 models/*.pt
+models/**/*.pt
 models/*.pth
+models/**/*.pth
 models/*.ckpt
+models/**/*.ckpt
 models/*.safetensors
+models/**/*.safetensors
 
 # Saidas de execucao
 debug/

@@ -23,6 +23,36 @@ CONFIG_PATH = REPO / "neveludens_local_config.json"
 LOG_DIR = REPO / "logs"
 DEFAULT_PORT = 5555
 MODEL_REPO = "nvidia/" + "Nitro" + "Gen"
+MODEL_CHOICES = {
+    "default": {
+        "label": "Padrão",
+        "repo": MODEL_REPO,
+        "filename": "ng.pt",
+        "local_dir": REPO / "models",
+        "path": CHECKPOINT,
+    },
+    "sonic3": {
+        "label": "Sonic 3",
+        "repo": "BotGoesBrrr/nitrogen-sonic3-ft",
+        "filename": "ng.pt",
+        "local_dir": REPO / "models" / "sonic3",
+        "path": REPO / "models" / "sonic3" / "ng.pt",
+    },
+    "pizza_tower": {
+        "label": "Pizza Tower",
+        "repo": "subbonan/nitrogen-pizza-tower-finetune",
+        "filename": "final_model.pt",
+        "local_dir": REPO / "models" / "pizza_tower",
+        "path": REPO / "models" / "pizza_tower" / "final_model.pt",
+    },
+    "pizza_tower_fast": {
+        "label": "Pizza Tower Fast",
+        "repo": "subbonan/nitrogen-pizza-tower-finetune",
+        "filename": "final_model_35.pt",
+        "local_dir": REPO / "models" / "pizza_tower",
+        "path": REPO / "models" / "pizza_tower" / "final_model_35.pt",
+    },
+}
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -51,6 +81,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=["default", "fighting", "split_screen"],
         default="default",
         help="Optional game-specific mode. Default does not alter model actions.",
+    )
+    parser.add_argument(
+        "--model-choice",
+        choices=sorted(MODEL_CHOICES),
+        default="default",
+        help="Checkpoint to use. Default keeps the current models/ng.pt behavior.",
     )
     parser.add_argument(
         "--agent-slot",
@@ -145,12 +181,12 @@ def save_config(config: dict) -> None:
     CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
-def header() -> None:
+def header(checkpoint_path: Path = CHECKPOINT, model_label: str = "Padrão") -> None:
     print("=" * 70)
     print("NeveLudens - Iniciador local")
     print("=" * 70)
     print(f"Projeto: {REPO}")
-    print(f"Modelo : {CHECKPOINT}")
+    print(f"Modelo : {model_label} ({checkpoint_path})")
     print()
 
 
@@ -159,12 +195,17 @@ def console_safe(text: str) -> str:
     return text.encode(encoding, errors="replace").decode(encoding, errors="replace")
 
 
-def preflight(agent_slot: str = "auto", multimodal_supervisor: str = "disabled") -> None:
+def preflight(
+    checkpoint_path: Path,
+    model_choice: str = "default",
+    agent_slot: str = "auto",
+    multimodal_supervisor: str = "disabled",
+) -> None:
     if not VENV_PYTHON.exists():
         raise RuntimeError("Ambiente .venv não encontrado. Rode iniciar.bat novamente.")
 
-    if not CHECKPOINT.exists():
-        download_checkpoint()
+    if not checkpoint_path.exists():
+        download_checkpoint(model_choice)
 
     import torch
     import vgamepad as vg
@@ -202,16 +243,40 @@ def preflight(agent_slot: str = "auto", multimodal_supervisor: str = "disabled")
     print()
 
 
-def download_checkpoint() -> None:
-    print("Checkpoint não encontrado. Baixando modelo base ng.pt...")
-    (REPO / "models").mkdir(exist_ok=True)
+def resolve_model_choice(model_choice: str) -> tuple[Path, dict]:
+    spec = MODEL_CHOICES.get(model_choice)
+    if spec is None:
+        raise RuntimeError(f"Modelo desconhecido: {model_choice}")
+    return Path(spec["path"]), spec
+
+
+def same_checkpoint(left: str | Path, right: str | Path) -> bool:
+    try:
+        return Path(left).resolve() == Path(right).resolve()
+    except OSError:
+        return str(left) == str(right)
+
+
+def download_checkpoint(model_choice: str = "default") -> None:
+    checkpoint_path, spec = resolve_model_choice(model_choice)
+    print(f"Checkpoint não encontrado. Baixando modelo {spec['label']}...")
+    Path(spec["local_dir"]).mkdir(parents=True, exist_ok=True)
     if not HF_EXE.exists():
         raise RuntimeError("Comando hf.exe não encontrado na .venv.")
     subprocess.check_call(
-        [str(HF_EXE), "download", MODEL_REPO, "ng.pt", "--local-dir", "models"],
+        [
+            str(HF_EXE),
+            "download",
+            str(spec["repo"]),
+            str(spec["filename"]),
+            "--local-dir",
+            str(spec["local_dir"]),
+        ],
         cwd=REPO,
         env=local_env(),
     )
+    if not checkpoint_path.exists():
+        raise RuntimeError(f"Download concluído, mas o checkpoint não apareceu em: {checkpoint_path}")
 
 
 def visible_window_processes() -> list[tuple[str, str, int]]:
@@ -344,14 +409,14 @@ def tail(path: Path, lines: int = 80) -> str:
     return "\n".join(data[-lines:])
 
 
-def start_server(port: int, env: dict[str, str]) -> tuple[subprocess.Popen, Path]:
+def start_server(port: int, checkpoint_path: Path, env: dict[str, str]) -> tuple[subprocess.Popen, Path]:
     LOG_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = LOG_DIR / f"server_{stamp}.log"
     log_file = log_path.open("w", encoding="utf-8", errors="replace")
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
     proc = subprocess.Popen(
-        [str(VENV_PYTHON), "scripts/serve.py", str(CHECKPOINT), "--port", str(port)],
+        [str(VENV_PYTHON), "scripts/serve.py", str(checkpoint_path), "--port", str(port)],
         cwd=REPO,
         env=env,
         stdout=log_file,
@@ -511,13 +576,14 @@ def main(argv: list[str] | None = None) -> int:
     env = local_env()
     os.environ.update(env)
     stop_file = normalize_stop_file(args.stop_file)
-    header()
+    checkpoint_path, model_spec = resolve_model_choice(args.model_choice)
+    header(checkpoint_path, str(model_spec["label"]))
 
     if stop_requested(stop_file):
         raise StopRequested("Stop requested before launcher preflight")
 
     try:
-        preflight(args.agent_slot, args.multimodal_supervisor)
+        preflight(checkpoint_path, args.model_choice, args.agent_slot, args.multimodal_supervisor)
     except Exception as exc:
         print(f"Falha na verificacao inicial: {exc}")
         return 1
@@ -543,6 +609,8 @@ def main(argv: list[str] | None = None) -> int:
     advanced_memory = args.advanced_memory
     smart_recovery = args.smart_recovery
     special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init
+    print(f"Modelo selecionado: {model_spec['label']}")
+    print(f"Checkpoint: {checkpoint_path}")
     if special_init:
         print("Macro especial de inicialização ativada para este jogo.")
     if allow_menu:
@@ -562,18 +630,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if raw_port_open(port):
         info = server_info(port)
-        if info is not None:
+        if info is not None and same_checkpoint(info.get("ckpt_path", ""), checkpoint_path):
             print(f"Usando servidor NeveLudens que ja esta rodando na porta {port}.")
             server_proc = None
             log_path = None
         else:
+            if info is not None:
+                current_model = info.get("ckpt_path", "desconhecido")
+                print(f"Porta {port} ja tem um servidor com outro modelo ({current_model}).")
             new_port = find_free_port(port + 1)
             print(f"Porta {port} está ocupada. Vou usar {new_port}.")
             port = new_port
-            server_proc, log_path = start_server(port, env)
+            server_proc, log_path = start_server(port, checkpoint_path, env)
             info = wait_for_server(server_proc, port, log_path, stop_file=stop_file)
     else:
-        server_proc, log_path = start_server(port, env)
+        server_proc, log_path = start_server(port, checkpoint_path, env)
         info = wait_for_server(server_proc, port, log_path, stop_file=stop_file)
 
     print(f"Modelo: {Path(info.get('ckpt_path', str(CHECKPOINT))).name}")
@@ -591,6 +662,8 @@ def main(argv: list[str] | None = None) -> int:
 
     config.update({
         "process": process_name,
+        "model_choice": args.model_choice,
+        "checkpoint_path": str(checkpoint_path),
         "allow_menu": allow_menu,
         "screenshot_backend": screenshot_backend,
         "runtime_mode": runtime_mode,
