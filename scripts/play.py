@@ -101,7 +101,7 @@ debug_outputs = args.output_mode == "debug"
 print(f"Modo de captura: {args.runtime_mode}")
 print(f"Saidas: {args.output_mode}")
 print(f"Modo de jogo: {args.game_mode}")
-print(f"Jogador do agente: {args.agent_slot}")
+print(f"Modo de jogador: {args.agent_slot}")
 print(f"Supervisor multimodal: {args.multimodal_supervisor}")
 print(f"Recuperacao inteligente: {'ligada' if args.smart_recovery else 'desligada'}")
 print(f"Memoria avancada: {'ligada' if args.advanced_memory else 'desligada'}")

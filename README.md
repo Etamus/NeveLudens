@@ -44,9 +44,9 @@ Abre a interface principal em WPF. O `iniciar.bat` chama a GUI local por PowerSh
 - Digitar manualmente o nome do `.exe`.
 - Escolher a captura: `auto`, `dxcam` ou `pyautogui`.
 - Escolher o modo de captura: `Precisão` ou `Tempo real`.
-- Escolher a saída de depuração: `Normal` ou `Debug`.
+- Escolher a saída de depuração: `Simples` ou `Debug`.
 - Escolher o modo de jogo: `Padrão`, `Jogo de luta` ou `Tela dividida`.
-- Escolher o jogador do agente: `Automático`, `Player 2` ou `Jogador 2 (Co-op)`.
+- Escolher o modo de jogador: `Automático`, `Player 2` ou `Jogador 2 (Co-op)`.
 - Escolher o supervisor multimodal: `Desativado` ou `Ativado`.
 - Ligar ou desligar a recuperação inteligente.
 - Ligar ou desligar a memória avançada.
@@ -61,9 +61,9 @@ Padrões atuais:
 - Permitir acesso de menus: desligado por padrão.
 - Captura recomendada: `auto`.
 - Modo de captura padrão: `Precisão`.
-- Saída de depuração padrão: `Normal`.
+- Saída de depuração padrão: `Simples`.
 - Modo de jogo padrão: `Padrão`, sem filtro extra sobre a IA.
-- Jogador do agente padrão: `Automático`, mantendo o comportamento atual.
+- Modo de jogador padrão: `Automático`, mantendo o comportamento atual.
 - Supervisor multimodal padrão: `Desativado`, mantendo o comportamento atual.
 - Recuperação inteligente: ligada por padrão.
 - Memória avançada: desligada por padrão, mantendo o comportamento atual.
@@ -76,7 +76,7 @@ Modos de captura:
 
 Saída de depuração:
 
-- `Normal`: não salva PNG por frame, vídeo debug, vídeo limpo, ações JSON ou log detalhado do supervisor.
+- `Simples`: não salva PNG por frame, vídeo debug, vídeo limpo, ações JSON ou log detalhado do supervisor.
 - `Debug`: salva os mesmos artefatos de depuração usados anteriormente.
 
 Modo de jogo:
@@ -88,12 +88,11 @@ Modo de jogo:
 Modelo:
 
 - `Padrão`: usa `models/ng.pt`, o mesmo checkpoint atual do NeveLudens.
-- `Sonic 3`: usa `BotGoesBrrr/nitrogen-sonic3-ft/ng.pt`, salvo em `models/sonic3/ng.pt`.
-- `Pizza Tower`: usa `subbonan/nitrogen-pizza-tower-finetune/final_model.pt`, salvo em `models/pizza_tower/final_model.pt`.
-- `Pizza Tower Fast`: usa `subbonan/nitrogen-pizza-tower-finetune/final_model_35.pt`, salvo em `models/pizza_tower/final_model_35.pt`.
+- `Dinâmico`: usa `subbonan/nitrogen-pizza-tower-finetune/final_model.pt`, salvo em `models/pizza_tower/final_model.pt`.
+- `Acelerado`: usa `subbonan/nitrogen-pizza-tower-finetune/final_model_35.pt`, salvo em `models/pizza_tower/final_model_35.pt`.
 - Os modelos alternativos são baixados automaticamente no primeiro uso. O modelo `Padrão` não é sobrescrito.
 
-Jogador do agente:
+Modo de jogador:
 
 - `Automático`: comportamento atual. O jogo decide a posição do controle virtual conforme a ordem de dispositivos.
 - `Player 2`: tenta fazer a IA entrar como segundo jogador. Primeiro aguarda o jogador humano assumir o Player 1; se nenhum controle XInput existir, cria um controle virtual parado para reservar o primeiro slot e depois cria o controle ativo da IA. Após acordar o controle, move para a direita e confirma com `SOUTH`/A para ajudar em telas de escolha de lado.
@@ -260,8 +259,7 @@ Pastas usadas:
 - `.venv`: ambiente Python local.
 - `.cache`: caches locais de pip, Hugging Face, Transformers e Torch.
 - `models/ng.pt`: checkpoint padrão do modelo.
-- `models/sonic3/ng.pt`: checkpoint alternativo de Sonic 3, baixado no primeiro uso.
-- `models/pizza_tower/*.pt`: checkpoints alternativos de Pizza Tower, baixados no primeiro uso.
+- `models/pizza_tower/*.pt`: checkpoints alternativos Dinâmico/Acelerado, baixados no primeiro uso.
 - `logs`: logs de servidor, interface e instalação.
 - `out`: vídeos, ações e logs do supervisor.
 - `debug`: capturas de diagnóstico e frames.
@@ -274,9 +272,9 @@ Pastas usadas:
 4. Selecione o jogo ou digite o nome do `.exe`.
 5. Deixe a captura em `auto`.
 6. Deixe o modo de captura em **Precisão** ou escolha **Tempo real**.
-7. Deixe a saída de depuração em **Normal** ou escolha **Debug** para gravar PNG/vídeos/logs detalhados.
+7. Deixe a saída de depuração em **Simples** ou escolha **Debug** para gravar PNG/vídeos/logs detalhados.
 8. Deixe o modo de jogo em **Padrão**, escolha **Jogo de luta** para Street Fighter 6 ou **Tela dividida** para jogos co-op/split-screen em que a IA deve enxergar apenas a metade esquerda da tela.
-9. Deixe o jogador do agente em **Automático**, escolha **Player 2** para entrada lateral padrão ou **Jogador 2 (Co-op)** para a macro de confirmação/esquerda/confirmação.
+9. Deixe o modo de jogador em **Automático**, escolha **Player 2** para entrada lateral padrão ou **Jogador 2 (Co-op)** para a macro de confirmação/esquerda/confirmação.
 10. Deixe **Recuperação inteligente** ligada para usar memória temporal e anti-loop juntos.
 11. Deixe **Memória avançada** desligada para manter o padrão, ou ligue quando quiser memória visual/persistente por jogo.
 12. Clique em **Iniciar**.

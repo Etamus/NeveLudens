@@ -117,7 +117,7 @@ $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="NeveLudens - Iniciar"
-        Width="1040" Height="760"
+        Width="1040" Height="435"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -193,6 +193,55 @@ $xaml = @"
             </Setter>
         </Style>
 
+        <Style x:Key="CircleChevronBtn" TargetType="Button">
+            <Setter Property="Width" Value="38"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Background" Value="#FFFFFF"/>
+            <Setter Property="Foreground" Value="#111111"/>
+            <Setter Property="BorderBrush" Value="#E4E4E7"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="19"
+                                SnapsToDevicePixels="True">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="14" ShadowDepth="3" Opacity="0.12" Color="#000000"/>
+                            </Border.Effect>
+                            <Grid Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Path x:Name="ChevronPath"
+                                      Data="M 4 7 L 9 12 L 14 7"
+                                      Stroke="{TemplateBinding Foreground}"
+                                      StrokeThickness="2.2"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      Fill="Transparent"
+                                      Stretch="None"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#FAFAFA"/>
+                                <Setter TargetName="bd" Property="BorderBrush" Value="#A1A1AA"/>
+                            </Trigger>
+                            <Trigger Property="Tag" Value="expanded">
+                                <Setter TargetName="ChevronPath" Property="Data" Value="M 4 11 L 9 6 L 14 11"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="WindowCloseBtn" TargetType="Button">
             <Setter Property="Width" Value="44"/>
             <Setter Property="Height" Value="32"/>
@@ -248,20 +297,64 @@ $xaml = @"
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
                         <Grid>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CheckStates">
+                                    <VisualState x:Name="Unchecked">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchThumb"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                             To="0" Duration="0:0:0.16">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchTrackOn"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0" Duration="0:0:0.16">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Checked">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchThumb"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                             To="18" Duration="0:0:0.16">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="SwitchTrackOn"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1" Duration="0:0:0.16">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Indeterminate"/>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Border x:Name="SwitchTrack" Width="42" Height="24" CornerRadius="12" Background="#D4D4D8">
-                                <Ellipse x:Name="SwitchThumb" Width="18" Height="18" Fill="White" Margin="3" HorizontalAlignment="Left"/>
+                            <Border x:Name="SwitchTrack" Width="42" Height="24" CornerRadius="12" Background="#D4D4D8" ClipToBounds="True">
+                                <Grid>
+                                    <Border x:Name="SwitchTrackOn" CornerRadius="12" Background="#111111" Opacity="0"/>
+                                    <Ellipse x:Name="SwitchThumb" Width="18" Height="18" Fill="White" Margin="3" HorizontalAlignment="Left">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform X="0"/>
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Grid>
                             </Border>
                             <ContentPresenter Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"/>
                         </Grid>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="SwitchTrack" Property="Background" Value="#111111"/>
-                                <Setter TargetName="SwitchThumb" Property="HorizontalAlignment" Value="Right"/>
-                            </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter TargetName="SwitchTrack" Property="Opacity" Value="0.45"/>
                             </Trigger>
@@ -298,130 +391,127 @@ $xaml = @"
             <Grid Grid.Row="1" Margin="32,8,32,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="18"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition x:Name="ConsoleRow" Height="0"/>
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0">
                     <Border Style="{StaticResource Card}">
                         <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="16"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="16"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="14"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="250"/>
+                                <ColumnDefinition Width="24"/>
+                                <ColumnDefinition Width="344"/>
+                                <ColumnDefinition Width="24"/>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
-                            <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,0,12,0">
+                            <StackPanel Grid.Column="0">
                                 <TextBlock Text="Janela detectada:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="ProcessCombo" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
-                                            <TextBlock Text="{Binding Display}" Width="330" TextTrimming="CharacterEllipsis"
+                                            <TextBlock Text="{Binding Display}" Width="220" TextTrimming="CharacterEllipsis"
                                                        ToolTip="{Binding FullDisplay}"/>
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
-                            </StackPanel>
 
-                            <StackPanel Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="2" Margin="0,0,12,0">
-                                <TextBlock Text="Processo do jogo (.exe):" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                <TextBlock Text="Processo do jogo (.exe):" FontSize="13" Foreground="#52525B" Margin="0,16,0,6"/>
                                 <TextBox x:Name="ManualProcessBox"/>
+
+                                <Button x:Name="RefreshButton" Content="Atualizar" Style="{StaticResource GhostBtn}"
+                                        HorizontalAlignment="Right" Margin="0,16,0,0"/>
                             </StackPanel>
 
-                            <Button Grid.Row="0" Grid.Column="4" x:Name="RefreshButton" Content="Atualizar" Style="{StaticResource GhostBtn}"
-                                    VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
+                            <Grid Grid.Column="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="166"/>
+                                    <ColumnDefinition Width="12"/>
+                                    <ColumnDefinition Width="166"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="16"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="16"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
 
-                            <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,12,0">
-                                <TextBlock Text="Captura:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="BackendCombo">
-                                    <ComboBoxItem Content="Automático" Tag="auto" IsSelected="True"/>
-                                    <ComboBoxItem Content="DXcam" Tag="dxcam"/>
-                                    <ComboBoxItem Content="PyAutoGUI" Tag="pyautogui"/>
-                                </ComboBox>
-                            </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="0">
+                                    <TextBlock Text="Modelo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="ModelCombo">
+                                        <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
+                                        <ComboBoxItem Content="Dinâmico" Tag="pizza_tower"/>
+                                        <ComboBoxItem Content="Acelerado" Tag="pizza_tower_fast"/>
+                                    </ComboBox>
+                                </StackPanel>
 
-                            <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,12,0">
-                                <TextBlock Text="Modo de captura:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="RuntimeModeCombo">
-                                    <ComboBoxItem Content="Precisão" Tag="precision" IsSelected="True"/>
-                                    <ComboBoxItem Content="Tempo real" Tag="realtime"/>
-                                </ComboBox>
-                            </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="2">
+                                    <TextBlock Text="Captura:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="BackendCombo">
+                                        <ComboBoxItem Content="Automático" Tag="auto" IsSelected="True"/>
+                                        <ComboBoxItem Content="DXcam" Tag="dxcam"/>
+                                        <ComboBoxItem Content="PyAutoGUI" Tag="pyautogui"/>
+                                    </ComboBox>
+                                </StackPanel>
 
-                            <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,12,0">
-                                <TextBlock Text="Saída de depuração:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="OutputModeCombo">
-                                    <ComboBoxItem Content="Normal" Tag="normal" IsSelected="True"/>
-                                    <ComboBoxItem Content="Detalhado" Tag="debug"/>
-                                </ComboBox>
-                            </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="0">
+                                    <TextBlock Text="Modo de captura:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="RuntimeModeCombo">
+                                        <ComboBoxItem Content="Precisão" Tag="precision" IsSelected="True"/>
+                                        <ComboBoxItem Content="Tempo real" Tag="realtime"/>
+                                    </ComboBox>
+                                </StackPanel>
 
-                            <StackPanel Grid.Row="2" Grid.Column="3" Margin="0,0,12,0">
-                                <TextBlock Text="Modo de jogo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="GameModeCombo">
-                                    <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
-                                    <ComboBoxItem Content="Luta" Tag="fighting"/>
-                                    <ComboBoxItem Content="Tela dividida" Tag="split_screen"/>
-                                </ComboBox>
-                            </StackPanel>
+                                <StackPanel Grid.Row="2" Grid.Column="2">
+                                    <TextBlock Text="Modo de jogo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="GameModeCombo">
+                                        <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
+                                        <ComboBoxItem Content="Luta" Tag="fighting"/>
+                                        <ComboBoxItem Content="Tela dividida" Tag="split_screen"/>
+                                    </ComboBox>
+                                </StackPanel>
 
-                            <StackPanel Grid.Row="4" Grid.Column="0" Margin="0,0,12,0">
-                                <TextBlock Text="Jogador do agente:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="AgentSlotCombo">
-                                    <ComboBoxItem Content="Automático" Tag="auto" IsSelected="True"/>
-                                    <ComboBoxItem Content="Jogador 2" Tag="player2"/>
-                                    <ComboBoxItem Content="Jogador 2 (Co-op)" Tag="player2_coop"/>
-                                </ComboBox>
-                            </StackPanel>
+                                <StackPanel Grid.Row="4" Grid.Column="0">
+                                    <TextBlock Text="Modo de jogador:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="AgentSlotCombo">
+                                        <ComboBoxItem Content="Padrão" Tag="auto" IsSelected="True"/>
+                                        <ComboBoxItem Content="Jogador 2" Tag="player2"/>
+                                        <ComboBoxItem Content="Jogador 2 (Co-op)" Tag="player2_coop"/>
+                                    </ComboBox>
+                                </StackPanel>
 
-                            <StackPanel Grid.Row="4" Grid.Column="1" Margin="0,0,12,0">
-                                <TextBlock Text="Supervisor multimodal:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="MultimodalSupervisorCombo">
-                                    <ComboBoxItem Content="Desativado" Tag="disabled" IsSelected="True"/>
-                                    <ComboBoxItem Content="Ativado" Tag="enabled"/>
-                                </ComboBox>
-                            </StackPanel>
+                                <StackPanel Grid.Row="4" Grid.Column="2">
+                                    <TextBlock Text="Saída de depuração:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
+                                    <ComboBox x:Name="OutputModeCombo">
+                                        <ComboBoxItem Content="Simples" Tag="normal" IsSelected="True"/>
+                                        <ComboBoxItem Content="Detalhado" Tag="debug"/>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
 
-                            <StackPanel Grid.Row="4" Grid.Column="2" Margin="0,0,12,0">
-                                <TextBlock Text="Modelo:" FontSize="13" Foreground="#52525B" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="ModelCombo">
-                                    <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
-                                    <ComboBoxItem Content="Sonic 3" Tag="sonic3"/>
-                                    <ComboBoxItem Content="Pizza Tower" Tag="pizza_tower"/>
-                                    <ComboBoxItem Content="Pizza Tower Fast" Tag="pizza_tower_fast"/>
-                                </ComboBox>
-                            </StackPanel>
-
-                            <WrapPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="5" VerticalAlignment="Center">
-                                <CheckBox x:Name="SmartRecoveryCheck" Content="Recuperação inteligente" IsChecked="True"
-                                          Style="{StaticResource ToggleCheck}" Margin="0,0,18,0"/>
+                            <StackPanel Grid.Column="4" VerticalAlignment="Top" Margin="0,22,0,0">
+                                <CheckBox x:Name="MultimodalSupervisorCheck" Content="Supervisor multimodal" IsChecked="False"
+                                          Style="{StaticResource ToggleCheck}" Margin="0,0,0,14"/>
                                 <CheckBox x:Name="AdvancedMemoryCheck" Content="Memória avançada" IsChecked="False"
-                                          Style="{StaticResource ToggleCheck}" Margin="0,0,18,0"/>
+                                          Style="{StaticResource ToggleCheck}" Margin="0,0,0,14"/>
+                                <CheckBox x:Name="SmartRecoveryCheck" Content="Recuperação inteligente" IsChecked="True"
+                                          Style="{StaticResource ToggleCheck}" Margin="0,0,0,14"/>
                                 <CheckBox x:Name="MenuActionsCheck" Content="Permitir acesso aos menus" IsChecked="False"
-                                          Style="{StaticResource ToggleCheck}" Margin="0,8,0,0"/>
-                            </WrapPanel>
+                                          Style="{StaticResource ToggleCheck}"/>
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </StackPanel>
 
-                <Grid Grid.Row="2">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+                <Button Grid.Row="1" x:Name="ConsoleToggleButton" Style="{StaticResource CircleChevronBtn}"
+                        HorizontalAlignment="Center" Margin="0,12,0,18"
+                        ToolTip="Mostrar console"/>
 
-                    <Border Grid.Row="1" Background="#0A0A0A" CornerRadius="10" Padding="14,12">
+                <Grid Grid.Row="2">
+                    <Border x:Name="ConsolePanel" Background="#0A0A0A" CornerRadius="10" Padding="14,12"
+                            Visibility="Collapsed">
                         <TextBox x:Name="LogBox" Background="Transparent" Foreground="#D4D4D4" BorderThickness="0"
                                  IsReadOnly="True" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"
                                  AcceptsReturn="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"/>
@@ -454,16 +544,20 @@ $MenuActionsCheck = $window.FindName("MenuActionsCheck")
 $OutputModeCombo = $window.FindName("OutputModeCombo")
 $GameModeCombo = $window.FindName("GameModeCombo")
 $AgentSlotCombo = $window.FindName("AgentSlotCombo")
-$MultimodalSupervisorCombo = $window.FindName("MultimodalSupervisorCombo")
+$MultimodalSupervisorCheck = $window.FindName("MultimodalSupervisorCheck")
 $ModelCombo = $window.FindName("ModelCombo")
 $AdvancedMemoryCheck = $window.FindName("AdvancedMemoryCheck")
 $SmartRecoveryCheck = $window.FindName("SmartRecoveryCheck")
 $RefreshButton = $window.FindName("RefreshButton")
 $StartButton = $window.FindName("StartButton")
 $DiagnoseButton = $window.FindName("DiagnoseButton")
+$ConsoleToggleButton = $window.FindName("ConsoleToggleButton")
+$ConsoleRow = $window.FindName("ConsoleRow")
+$ConsolePanel = $window.FindName("ConsolePanel")
 $LogBox = $window.FindName("LogBox")
 $script:LogTimer = New-Object System.Windows.Threading.DispatcherTimer
 $script:LogTimer.Interval = [TimeSpan]::FromMilliseconds(500)
+$script:ConsoleExpanded = $false
 
 function Append-Log {
     param(
@@ -614,9 +708,8 @@ function Get-AgentSlot {
 }
 
 function Get-MultimodalSupervisorMode {
-    $selected = $MultimodalSupervisorCombo.SelectedItem
-    if ($selected -and $selected.Tag) {
-        return [string]$selected.Tag
+    if ([bool]$MultimodalSupervisorCheck.IsChecked) {
+        return "enabled"
     }
     return "disabled"
 }
@@ -635,6 +728,68 @@ function Get-SmartRecoveryEnabled {
 
 function Get-AdvancedMemoryEnabled {
     return [bool]$AdvancedMemoryCheck.IsChecked
+}
+
+function New-GuiDoubleAnimation {
+    param(
+        [double]$To,
+        [double]$From,
+        [int]$Milliseconds = 220
+    )
+    $animation = New-Object System.Windows.Media.Animation.DoubleAnimation
+    $animation.From = $From
+    $animation.To = $To
+    $animation.Duration = New-Object System.Windows.Duration ([TimeSpan]::FromMilliseconds($Milliseconds))
+    $easing = New-Object System.Windows.Media.Animation.CubicEase
+    $easing.EasingMode = [System.Windows.Media.Animation.EasingMode]::EaseOut
+    $animation.EasingFunction = $easing
+    return $animation
+}
+
+function Set-ConsoleExpanded {
+    param([bool]$Expanded)
+    $script:ConsoleExpanded = $Expanded
+    if ($Expanded) {
+        $window.BeginAnimation([System.Windows.FrameworkElement]::HeightProperty, $null)
+        $ConsolePanel.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
+        $ConsoleRow.Height = [System.Windows.GridLengthConverter]::new().ConvertFromString("*")
+        $ConsolePanel.Visibility = [System.Windows.Visibility]::Visible
+        $ConsolePanel.Opacity = 0
+        $ConsoleToggleButton.Tag = "expanded"
+        $ConsoleToggleButton.ToolTip = "Ocultar console"
+        $heightAnimation = New-GuiDoubleAnimation -From $window.Height -To 690 -Milliseconds 240
+        $fadeAnimation = New-GuiDoubleAnimation -From 0 -To 1 -Milliseconds 180
+        $heightAnimation.add_Completed({
+            if ($script:ConsoleExpanded) {
+                $window.BeginAnimation([System.Windows.FrameworkElement]::HeightProperty, $null)
+                $window.Height = 690
+                $ConsolePanel.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
+                $ConsolePanel.Opacity = 1
+            }
+        })
+        $window.BeginAnimation([System.Windows.FrameworkElement]::HeightProperty, $heightAnimation)
+        $ConsolePanel.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fadeAnimation)
+        $LogBox.ScrollToEnd()
+    } else {
+        $ConsoleToggleButton.Tag = $null
+        $ConsoleToggleButton.ToolTip = "Mostrar console"
+        $window.BeginAnimation([System.Windows.FrameworkElement]::HeightProperty, $null)
+        $ConsolePanel.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
+        $heightAnimation = New-GuiDoubleAnimation -From $window.Height -To 435 -Milliseconds 220
+        $fadeAnimation = New-GuiDoubleAnimation -From $ConsolePanel.Opacity -To 0 -Milliseconds 140
+        $heightAnimation.add_Completed({
+            if (-not $script:ConsoleExpanded) {
+                $window.BeginAnimation([System.Windows.FrameworkElement]::HeightProperty, $null)
+                $window.Height = 435
+                $ConsolePanel.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $null)
+                $ConsolePanel.Opacity = 0
+                $ConsoleRow.Height = [System.Windows.GridLengthConverter]::new().ConvertFromString("0")
+                $ConsolePanel.Visibility = [System.Windows.Visibility]::Collapsed
+            }
+        })
+        $window.BeginAnimation([System.Windows.FrameworkElement]::HeightProperty, $heightAnimation)
+        $ConsolePanel.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $fadeAnimation)
+    }
 }
 
 function Set-RunButtonState {
@@ -808,6 +963,7 @@ $TitleBar.Add_MouseLeftButtonDown({
 $BtnClose.Add_Click({ $window.Close() })
 $BtnMinimize.Add_Click({ $window.WindowState = "Minimized" })
 $RefreshButton.Add_Click({ Refresh-Processes })
+$ConsoleToggleButton.Add_Click({ Set-ConsoleExpanded -Expanded:(-not $script:ConsoleExpanded) })
 
 $ProcessCombo.Add_SelectionChanged({
     if ($ProcessCombo.SelectedItem) {

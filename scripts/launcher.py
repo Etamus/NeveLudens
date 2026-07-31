@@ -31,22 +31,15 @@ MODEL_CHOICES = {
         "local_dir": REPO / "models",
         "path": CHECKPOINT,
     },
-    "sonic3": {
-        "label": "Sonic 3",
-        "repo": "BotGoesBrrr/nitrogen-sonic3-ft",
-        "filename": "ng.pt",
-        "local_dir": REPO / "models" / "sonic3",
-        "path": REPO / "models" / "sonic3" / "ng.pt",
-    },
     "pizza_tower": {
-        "label": "Pizza Tower",
+        "label": "Dinâmico",
         "repo": "subbonan/nitrogen-pizza-tower-finetune",
         "filename": "final_model.pt",
         "local_dir": REPO / "models" / "pizza_tower",
         "path": REPO / "models" / "pizza_tower" / "final_model.pt",
     },
     "pizza_tower_fast": {
-        "label": "Pizza Tower Fast",
+        "label": "Acelerado",
         "repo": "subbonan/nitrogen-pizza-tower-finetune",
         "filename": "final_model_35.pt",
         "local_dir": REPO / "models" / "pizza_tower",
@@ -621,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Modo de captura: {runtime_mode}")
     print(f"Saidas: {output_mode}")
     print(f"Modo de jogo: {game_mode}")
-    print(f"Jogador do agente: {agent_slot}")
+    print(f"Modo de jogador: {agent_slot}")
     print(f"Supervisor multimodal: {multimodal_supervisor}")
     print(f"Memoria avancada: {'ligada' if advanced_memory else 'desligada'}")
     print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
@@ -654,7 +647,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Modo de captura: {runtime_mode}")
     print(f"Saidas: {output_mode}")
     print(f"Modo de jogo: {game_mode}")
-    print(f"Jogador do agente: {agent_slot}")
+    print(f"Modo de jogador: {agent_slot}")
     print(f"Supervisor multimodal: {multimodal_supervisor}")
     print(f"Memoria avancada: {'ligada' if advanced_memory else 'desligada'}")
     print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
