@@ -8,7 +8,13 @@ A proposta é abrir um jogo, escolher o processo na interface e iniciar um agent
 
 ---
 
-## Visão de Produto
+<img width="1169" height="627" alt="{D13A4066-6955-40FB-8C9A-268A4DFFA8E9}" src="https://github.com/user-attachments/assets/2c2b4074-d973-4f7f-9cb6-21d6e897edb8" />
+<img width="1167" height="624" alt="{B0D1792A-4D1A-43B8-B706-C620029E69F0}" src="https://github.com/user-attachments/assets/a7cd7c0e-bda1-4571-8056-75d462513e74" />
+<img width="1169" height="625" alt="{9B7D534B-A0D3-4BB6-94D5-4D3965465900}" src="https://github.com/user-attachments/assets/b6578c10-8e90-4985-9462-644f4a379131" />
+
+---
+
+## Produto
 
 NeveLudens funciona como um piloto visual local para jogos. Ele combina um modelo generalista com uma camada operacional feita para tornar a execução mais prática: captura confiável, memória temporal, supervisor de objetivos, biblioteca de skills e perfis por jogo.
 
@@ -22,7 +28,7 @@ O produto atual entrega:
 
 Na prática, o NeveLudens é indicado para pesquisa, experimentação, prototipagem e demonstrações de agentes visuais em jogos. Ele ainda não deve ser tratado como uma IA capaz de zerar qualquer jogo sozinha, mas já oferece uma base muito mais usável do que um player bruto de modelo.
 
-## O Que Ele Faz
+## Funcionamento
 
 1. Detecta janelas visíveis no Windows e permite escolher o processo do jogo.
 2. Captura a janela com `dxcam` por padrão e usa `pyautogui` como fallback conservador quando a captura fica preta ou congelada por vários frames.
@@ -34,7 +40,7 @@ Na prática, o NeveLudens é indicado para pesquisa, experimentação, prototipa
 8. Envia a ação final para o jogo por um controle virtual.
 9. Salva logs, vídeos e decisões do supervisor para diagnóstico.
 
-## Execução e Instalação
+## Instalação
 
 ### `iniciar.bat`
 
@@ -88,8 +94,8 @@ Modo de jogo:
 Modelo:
 
 - `Padrão`: usa `models/ng.pt`, o mesmo checkpoint atual do NeveLudens.
-- `Dinâmico`: usa `subbonan/nitrogen-pizza-tower-finetune/final_model.pt`, salvo em `models/pizza_tower/final_model.pt`.
-- `Acelerado`: usa `subbonan/nitrogen-pizza-tower-finetune/final_model_35.pt`, salvo em `models/pizza_tower/final_model_35.pt`.
+- `Dinâmico`: usa `final_model.pt`, salvo em `models/pizza_tower/final_model.pt`.
+- `Acelerado`: usa `final_model_35.pt`, salvo em `models/pizza_tower/final_model_35.pt`.
 - Os modelos alternativos são baixados automaticamente no primeiro uso. O modelo `Padrão` não é sobrescrito.
 
 Modo de jogador:
@@ -138,7 +144,7 @@ Roda um instalador CMD normal. Ele prepara o projeto para uso local:
 
 Nada é instalado globalmente pelo `pip`.
 
-## Competência do Modelo
+## Benchmark
 
 A tabela abaixo resume a competência observada por tipo de jogo e tipo de tarefa:
 
@@ -154,7 +160,7 @@ Leitura prática:
 - Em 2D com visão superior, tarefas específicas podem funcionar melhor que combate puro.
 - Em 2D lateral, plataforma e navegação ainda são pontos mais frágeis.
 
-## Precisão por Gênero de Jogo
+## Precisão por Gênero
 
 | Gênero | Precisão |
 | --- | ---: |
@@ -171,7 +177,7 @@ Leitura prática:
 
 Esses números ajudam a definir expectativas. O modelo generalista não tem o mesmo nível de competência em todos os gêneros. Por isso o NeveLudens adiciona supervisor, memória, skills e perfis por jogo: essas camadas não ensinam o modelo do zero, mas tornam a execução mais estável e menos repetitiva.
 
-## Camadas Inteligentes
+## Camadas
 
 ### Percepção confiável
 
@@ -244,27 +250,7 @@ O servidor local é iniciado na porta `5555` por padrão. Se essa porta estiver 
 
 Observação importante: o pacote Python `vgamepad` é instalado na `.venv`, mas o driver de controle virtual precisa estar disponível no Windows. O instalador valida isso e avisa se o controle virtual não puder ser criado.
 
-## Instalação
-
-Para uma cópia nova do projeto:
-
-```bat
-instalar.bat
-```
-
-O CMD mostra cada etapa da instalação e pausa no final para você conferir o resultado.
-
-Pastas usadas:
-
-- `.venv`: ambiente Python local.
-- `.cache`: caches locais de pip, Hugging Face, Transformers e Torch.
-- `models/ng.pt`: checkpoint padrão do modelo.
-- `models/pizza_tower/*.pt`: checkpoints alternativos Dinâmico/Acelerado, baixados no primeiro uso.
-- `logs`: logs de servidor, interface e instalação.
-- `out`: vídeos, ações e logs do supervisor.
-- `debug`: capturas de diagnóstico e frames.
-
-## Uso Rápido
+## Uso
 
 1. Abra o jogo no Windows.
 2. Execute `iniciar.bat`.
@@ -282,7 +268,7 @@ Pastas usadas:
 
 Se o agente parecer cego, vendo tela preta ou reagindo a uma imagem congelada, use **Diagnosticar** na própria interface.
 
-## Saídas Geradas
+## Saídas
 
 - `out/<modelo>/*_DEBUG.mp4`: vídeo com visualização de debug, salvo apenas no modo `Debug`.
 - `out/<modelo>/*_CLEAN.mp4`: vídeo limpo da captura, salvo apenas no modo `Debug`.
@@ -318,3 +304,9 @@ Normalmente você não precisa deles, mas continuam disponíveis:
 ```
 
 Para uso comum, prefira `instalar.bat` e `iniciar.bat`.
+
+## Informações Legais
+
+Copyright (c) 2026 Mateus Lopes. Todos os direitos reservados.
+
+Qualquer cópia, redistribuição ou modificação deve preservar a atribuição ao autor original conforme LICENSE.txt.
