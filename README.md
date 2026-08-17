@@ -8,6 +8,7 @@ NeveLudens é um agente visual local para jogos que opera diretamente sobre a in
 
 <img width="966" height="625" alt="{9740AB9A-4D31-4B44-A5C4-ACBEB62D5FBA}" src="https://github.com/user-attachments/assets/6d88154e-9516-4069-917f-b8d926af3184" />
 <img width="966" height="624" alt="{706FA098-61AC-44CD-BFEC-E37877F25FAC}" src="https://github.com/user-attachments/assets/3e05f318-af24-4b21-b4cb-540dfcdb208d" />
+
 ---
 
 ## Produto
