@@ -652,7 +652,7 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="SessionGameText" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Text="Nenhum jogo selecionado"/>
-                            <Button x:Name="StartButton" Grid.Column="1" Width="88" MinWidth="88" Height="36" Padding="14,9" FontSize="14" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" IsEnabled="False">
+                            <Button x:Name="StartButton" Grid.Column="1" Width="88" MinWidth="88" Height="36" Padding="14,9" FontSize="15" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" IsEnabled="False">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                                     <Path x:Name="StartButtonPowerIcon"
                                           Width="14"

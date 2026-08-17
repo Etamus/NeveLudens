@@ -2,16 +2,12 @@
 
 ---
 
-NeveLudens é uma plataforma local de agente visual para jogos. Ele observa a janela do jogo, interpreta frames com um modelo visual, transforma decisões em comandos de controle virtual e aplica uma camada de supervisão para tornar a execução mais estável.
-
-A proposta é abrir um jogo, escolher o processo na interface e iniciar um agente capaz jogar usando apenas imagem e controle. O projeto não depende de leitura de memória do jogo, scripts por fase ou integração específica com a engine.
+NeveLudens é um agente visual local para jogos que opera diretamente sobre a interface visual do jogo. Ela captura frames, executa inferência visual para selecionar ações e envia comandos por meio de um controle virtual, usando memória temporal e supervisão para reduzir repetição, travamentos e decisões inconsistentes. O agente não depende de leitura de memória do jogo, instrumentação da engine ou scripts específicos por fase, mantendo uma operação plug-and-play.
 
 ---
 
-<img width="1169" height="627" alt="{D13A4066-6955-40FB-8C9A-268A4DFFA8E9}" src="https://github.com/user-attachments/assets/2c2b4074-d973-4f7f-9cb6-21d6e897edb8" />
-<img width="1167" height="624" alt="{B0D1792A-4D1A-43B8-B706-C620029E69F0}" src="https://github.com/user-attachments/assets/a7cd7c0e-bda1-4571-8056-75d462513e74" />
-<img width="1169" height="625" alt="{9B7D534B-A0D3-4BB6-94D5-4D3965465900}" src="https://github.com/user-attachments/assets/b6578c10-8e90-4985-9462-644f4a379131" />
-
+<img width="966" height="625" alt="{9740AB9A-4D31-4B44-A5C4-ACBEB62D5FBA}" src="https://github.com/user-attachments/assets/6d88154e-9516-4069-917f-b8d926af3184" />
+<img width="966" height="624" alt="{706FA098-61AC-44CD-BFEC-E37877F25FAC}" src="https://github.com/user-attachments/assets/3e05f318-af24-4b21-b4cb-540dfcdb208d" />
 ---
 
 ## Produto
