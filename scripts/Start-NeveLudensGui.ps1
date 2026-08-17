@@ -4,6 +4,22 @@ Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
 
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class NeveLudensTaskbar
+{
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
+}
+"@
+
+$appIdResult = [NeveLudensTaskbar]::SetCurrentProcessExplicitAppUserModelID("NeveLudens.Desktop.Launcher")
+if ($appIdResult -ne 0) {
+    throw "Não foi possível configurar o identificador da barra de tarefas (HRESULT: $appIdResult)."
+}
+
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $VenvPython = Join-Path $Repo ".venv\Scripts\python.exe"
 $ConfigPath = Join-Path $Repo "neveludens_local_config.json"
@@ -12,6 +28,7 @@ $OutDir = Join-Path $Repo "out"
 $DebugDir = Join-Path $Repo "debug"
 $InstallBat = Join-Path $Repo "instalar.bat"
 $XamlPath = Join-Path $PSScriptRoot "ui\NeveLudens.xaml"
+$IconPath = Join-Path $Repo "static\favicon.png"
 
 $script:AgentProcess = $null
 $script:ActiveProcess = $null
@@ -123,6 +140,23 @@ if (-not (Test-Path $XamlPath)) {
 $xamlText = Get-Content -LiteralPath $XamlPath -Raw -Encoding UTF8
 $reader = New-Object System.Xml.XmlNodeReader ([xml]$xamlText)
 $window = [Windows.Markup.XamlReader]::Load($reader)
+
+$script:WindowIcon = $null
+if (Test-Path -LiteralPath $IconPath) {
+    $script:WindowIcon = New-Object System.Windows.Media.Imaging.BitmapImage
+    $script:WindowIcon.BeginInit()
+    $script:WindowIcon.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+    $script:WindowIcon.UriSource = New-Object System.Uri($IconPath, [System.UriKind]::Absolute)
+    $script:WindowIcon.EndInit()
+    $script:WindowIcon.Freeze()
+    $window.Icon = $script:WindowIcon
+}
+
+$window.Add_SourceInitialized({
+    if ($script:WindowIcon) {
+        $window.Icon = $script:WindowIcon
+    }
+})
 
 $controlNames = @(
     "TitleBar", "BtnMinimize", "BtnMaximize", "BtnClose",
