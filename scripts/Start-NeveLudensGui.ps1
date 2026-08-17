@@ -162,7 +162,7 @@ $controlNames = @(
     "TitleBar", "BtnMinimize", "BtnMaximize", "BtnClose",
     "NavOverview", "NavSettings", "NavDiagnostics",
     "OverviewPage", "SettingsPage", "DiagnosticsPage",
-    "SessionGameText", "StartButton",
+    "SessionGameText", "StartButton", "StartButtonPowerIcon", "StartButtonLabel",
     "NotificationBar", "NotificationTitle", "NotificationDetail", "NotificationDetailsButton",
     "ProcessCombo", "ManualProcessBox", "RefreshButton",
     "ModelCombo", "BackendCombo", "RuntimeModeCombo", "OutputModeCombo", "GameModeCombo", "AgentSlotCombo",
@@ -444,7 +444,8 @@ function Set-OperationalState {
     $script:OperationalState = $State
     switch ($State) {
         "starting" {
-            $StartButton.Content = "Parar"
+            $StartButtonLabel.Text = "Parar"
+            $StartButtonPowerIcon.Visibility = [System.Windows.Visibility]::Collapsed
             $StartButton.Width = 88
             $StartButton.Style = $window.FindResource("StopButton")
             $StartButton.IsEnabled = $true
@@ -452,7 +453,8 @@ function Set-OperationalState {
             Set-ConfigurationEnabled $false
         }
         "running" {
-            $StartButton.Content = "Parar"
+            $StartButtonLabel.Text = "Parar"
+            $StartButtonPowerIcon.Visibility = [System.Windows.Visibility]::Collapsed
             $StartButton.Width = 88
             $StartButton.Style = $window.FindResource("StopButton")
             $StartButton.IsEnabled = $true
@@ -460,7 +462,8 @@ function Set-OperationalState {
             Set-ConfigurationEnabled $false
         }
         "stopping" {
-            $StartButton.Content = "Encerrando"
+            $StartButtonLabel.Text = "Encerrando"
+            $StartButtonPowerIcon.Visibility = [System.Windows.Visibility]::Collapsed
             $StartButton.Width = 116
             $StartButton.Style = $window.FindResource("StopButton")
             $StartButton.IsEnabled = $false
@@ -468,7 +471,8 @@ function Set-OperationalState {
             Set-ConfigurationEnabled $false
         }
         "diagnosing" {
-            $StartButton.Content = "Iniciar"
+            $StartButtonLabel.Text = "Iniciar"
+            $StartButtonPowerIcon.Visibility = [System.Windows.Visibility]::Visible
             $StartButton.Width = 88
             $StartButton.Style = $window.FindResource("PrimaryButton")
             $StartButton.IsEnabled = $false
@@ -476,7 +480,8 @@ function Set-OperationalState {
             Set-ConfigurationEnabled $false
         }
         "error" {
-            $StartButton.Content = "Iniciar"
+            $StartButtonLabel.Text = "Iniciar"
+            $StartButtonPowerIcon.Visibility = [System.Windows.Visibility]::Visible
             $StartButton.Width = 88
             $StartButton.Style = $window.FindResource("PrimaryButton")
             $DiagnoseButton.IsEnabled = $true
@@ -484,7 +489,8 @@ function Set-OperationalState {
             Update-Readiness
         }
         default {
-            $StartButton.Content = "Iniciar"
+            $StartButtonLabel.Text = "Iniciar"
+            $StartButtonPowerIcon.Visibility = [System.Windows.Visibility]::Visible
             $StartButton.Width = 88
             $StartButton.Style = $window.FindResource("PrimaryButton")
             $DiagnoseButton.IsEnabled = $true
@@ -644,6 +650,7 @@ function Start-LoggedPython {
         "cd /d `"$Repo`"",
         "set PYTHONUTF8=1",
         "set PYTHONUNBUFFERED=1",
+        "set `"PYTHONPATH=$Repo;%PYTHONPATH%`"",
         "set BNB_CUDA_VERSION=130",
         "`"$VenvPython`" $argText >> `"$script:RunLogPath`" 2>&1"
     )

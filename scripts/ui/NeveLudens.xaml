@@ -285,9 +285,9 @@
             <Setter Property="Height" Value="46"/>
             <Setter Property="Margin" Value="10,3"/>
             <Setter Property="Padding" Value="14,0"/>
-            <Setter Property="Foreground" Value="#C5CAD1"/>
+            <Setter Property="Foreground" Value="#B8B8B8"/>
             <Setter Property="FontSize" Value="15"/>
-            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="FontWeight" Value="Regular"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -652,7 +652,25 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="SessionGameText" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Text="Nenhum jogo selecionado"/>
-                            <Button x:Name="StartButton" Grid.Column="1" Width="88" MinWidth="88" Height="36" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Content="Iniciar" IsEnabled="False"/>
+                            <Button x:Name="StartButton" Grid.Column="1" Width="88" MinWidth="88" Height="36" Padding="14,9" FontSize="14" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" IsEnabled="False">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Path x:Name="StartButtonPowerIcon"
+                                          Width="14"
+                                          Height="14"
+                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          StrokeThickness="1.6"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          Stretch="Uniform"
+                                          Data="M 12 2 L 12 11 M 6.35 5.35 A 8 8 0 1 0 17.65 5.35"/>
+                                    <TextBlock x:Name="StartButtonLabel"
+                                               Margin="5,0,0,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                               Text="Iniciar"/>
+                                </StackPanel>
+                            </Button>
                         </Grid>
                     </Border>
 
