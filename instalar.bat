@@ -26,7 +26,7 @@ goto menu
 cls
 call :banner
 echo [1] Instalar
-echo [2] Verificar Ambiente Atual
+echo [2] Verificar ambiente
 echo [3] Sair
 echo.
 choice /c 123 /n /m "Escolha uma opcao: "

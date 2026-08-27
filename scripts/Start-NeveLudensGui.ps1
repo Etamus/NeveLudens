@@ -26,6 +26,7 @@ $ConfigPath = Join-Path $Repo "neveludens_local_config.json"
 $LogsDir = Join-Path $Repo "logs"
 $OutDir = Join-Path $Repo "out"
 $DebugDir = Join-Path $Repo "debug"
+$LastCapturePath = Join-Path $OutDir "last_model_capture.png"
 $InstallBat = Join-Path $Repo "instalar.bat"
 $XamlPath = Join-Path $PSScriptRoot "ui\NeveLudens.xaml"
 $IconPath = Join-Path $Repo "static\favicon.png"
@@ -43,6 +44,9 @@ $script:ForceStopAfterSeconds = 30
 $script:OperationalState = "idle"
 $script:CanStart = $false
 $script:LoadingSettings = $true
+$script:ApplyingPreset = $false
+$script:CustomPreset = $null
+$script:LastCaptureWriteTicks = 0
 
 New-Item -ItemType Directory -Force -Path $LogsDir, $OutDir, $DebugDir | Out-Null
 Set-Location $Repo
@@ -165,6 +169,7 @@ $controlNames = @(
     "SessionGameText", "StartButton", "StartButtonPowerIcon", "StartButtonLabel",
     "NotificationBar", "NotificationTitle", "NotificationDetail", "NotificationDetailsButton",
     "ProcessCombo", "ManualProcessBox", "RefreshButton",
+    "LastCaptureImage", "LastCapturePlaceholder", "PresetCombo", "PresetDescriptionText",
     "ModelCombo", "BackendCombo", "RuntimeModeCombo", "OutputModeCombo", "GameModeCombo", "AgentSlotCombo",
     "MultimodalSupervisorCheck", "AdvancedMemoryCheck", "SmartRecoveryCheck", "MenuActionsCheck",
     "DiagnoseButton", "LogBox", "CopyLogButton", "ClearLogButton"
@@ -180,6 +185,8 @@ foreach ($controlName in $controlNames) {
 
 $script:LogTimer = New-Object System.Windows.Threading.DispatcherTimer
 $script:LogTimer.Interval = [TimeSpan]::FromMilliseconds(400)
+$script:CaptureTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:CaptureTimer.Interval = [TimeSpan]::FromMilliseconds(100)
 
 function Get-Brush {
     param([string]$Name)
@@ -236,6 +243,244 @@ function Get-ModelPath {
     }
 }
 
+function Get-PresetSettings {
+    param([ValidateSet("default", "performance", "quality")][string]$Name)
+
+    switch ($Name) {
+        "performance" {
+            return [PSCustomObject][ordered]@{
+                model_choice = "default"
+                screenshot_backend = "auto"
+                runtime_mode = "realtime"
+                output_mode = "normal"
+                game_mode = "default"
+                agent_slot = "auto"
+                multimodal_supervisor = "disabled"
+                advanced_memory = $false
+                smart_recovery = $true
+                allow_menu = $false
+            }
+        }
+        "quality" {
+            return [PSCustomObject][ordered]@{
+                model_choice = "pizza_tower_fast"
+                screenshot_backend = "dxcam"
+                runtime_mode = "precision"
+                output_mode = "debug"
+                game_mode = "default"
+                agent_slot = "auto"
+                multimodal_supervisor = "enabled"
+                advanced_memory = $true
+                smart_recovery = $true
+                allow_menu = $false
+            }
+        }
+        default {
+            return [PSCustomObject][ordered]@{
+                model_choice = "default"
+                screenshot_backend = "auto"
+                runtime_mode = "precision"
+                output_mode = "normal"
+                game_mode = "default"
+                agent_slot = "auto"
+                multimodal_supervisor = "disabled"
+                advanced_memory = $false
+                smart_recovery = $true
+                allow_menu = $false
+            }
+        }
+    }
+}
+
+function Get-CurrentUiSettings {
+    return [PSCustomObject][ordered]@{
+        model_choice = Get-ComboTag $ModelCombo "default"
+        screenshot_backend = Get-ComboTag $BackendCombo "auto"
+        runtime_mode = Get-ComboTag $RuntimeModeCombo "precision"
+        output_mode = Get-ComboTag $OutputModeCombo "normal"
+        game_mode = Get-ComboTag $GameModeCombo "default"
+        agent_slot = Get-ComboTag $AgentSlotCombo "auto"
+        multimodal_supervisor = if ([bool]$MultimodalSupervisorCheck.IsChecked) { "enabled" } else { "disabled" }
+        advanced_memory = [bool]$AdvancedMemoryCheck.IsChecked
+        smart_recovery = [bool]$SmartRecoveryCheck.IsChecked
+        allow_menu = [bool]$MenuActionsCheck.IsChecked
+    }
+}
+
+function Set-UiSettings {
+    param($Settings)
+    if (-not $Settings) {
+        return
+    }
+
+    $previousApplyingPreset = $script:ApplyingPreset
+    $script:ApplyingPreset = $true
+    try {
+        Set-ComboByTag $ModelCombo ([string]$Settings.model_choice) "default"
+        Set-ComboByTag $BackendCombo ([string]$Settings.screenshot_backend) "auto"
+        Set-ComboByTag $RuntimeModeCombo ([string]$Settings.runtime_mode) "precision"
+        Set-ComboByTag $OutputModeCombo ([string]$Settings.output_mode) "normal"
+        Set-ComboByTag $GameModeCombo ([string]$Settings.game_mode) "default"
+        Set-ComboByTag $AgentSlotCombo ([string]$Settings.agent_slot) "auto"
+        $MultimodalSupervisorCheck.IsChecked = [bool]([string]$Settings.multimodal_supervisor -eq "enabled")
+        $AdvancedMemoryCheck.IsChecked = [bool]$Settings.advanced_memory
+        $SmartRecoveryCheck.IsChecked = [bool]$Settings.smart_recovery
+        $MenuActionsCheck.IsChecked = [bool]$Settings.allow_menu
+    } finally {
+        $script:ApplyingPreset = $previousApplyingPreset
+    }
+    Update-Readiness
+}
+
+function Test-UiSettingsMatch {
+    param($Left, $Right)
+    if (-not $Left -or -not $Right) {
+        return $false
+    }
+    foreach ($propertyName in @(
+        "model_choice", "screenshot_backend", "runtime_mode", "output_mode", "game_mode",
+        "agent_slot", "multimodal_supervisor", "advanced_memory", "smart_recovery", "allow_menu"
+    )) {
+        if ([string]$Left.$propertyName -ne [string]$Right.$propertyName) {
+            return $false
+        }
+    }
+    return $true
+}
+
+function Update-PresetDescription {
+    $description = switch (Get-ComboTag $PresetCombo "default") {
+        "performance" { "Prioriza resposta rápida e baixo custo de processamento." }
+        "quality" { "Ativa captura precisa, modelo acelerado e recursos avançados." }
+        default { "" }
+    }
+    $PresetDescriptionText.Text = $description
+    $PresetDescriptionText.Visibility = if ([string]::IsNullOrWhiteSpace($description)) {
+        [System.Windows.Visibility]::Collapsed
+    } else {
+        [System.Windows.Visibility]::Visible
+    }
+}
+
+function Initialize-PresetState {
+    $config = Get-SavedConfig
+    $currentSettings = Get-CurrentUiSettings
+    if ($config -and $config.custom_preset) {
+        $script:CustomPreset = $config.custom_preset
+    }
+
+    $selectedPreset = if ($config -and [string]$config.selected_preset -in @("default", "performance", "quality", "custom")) {
+        [string]$config.selected_preset
+    } else {
+        ""
+    }
+
+    if ($selectedPreset -eq "custom") {
+        $script:CustomPreset = $currentSettings
+    } elseif ($selectedPreset -in @("default", "performance", "quality")) {
+        if (-not (Test-UiSettingsMatch $currentSettings (Get-PresetSettings $selectedPreset))) {
+            $selectedPreset = ""
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($selectedPreset)) {
+        foreach ($candidate in @("default", "performance", "quality")) {
+            if (Test-UiSettingsMatch $currentSettings (Get-PresetSettings $candidate)) {
+                $selectedPreset = $candidate
+                break
+            }
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($selectedPreset)) {
+        $selectedPreset = "custom"
+        $script:CustomPreset = $currentSettings
+    } elseif (-not $script:CustomPreset) {
+        $script:CustomPreset = $currentSettings
+    }
+
+    $script:ApplyingPreset = $true
+    try {
+        Set-ComboByTag $PresetCombo $selectedPreset "default"
+    } finally {
+        $script:ApplyingPreset = $false
+    }
+    Update-PresetDescription
+}
+
+function Set-CustomPresetFromUi {
+    if ($script:LoadingSettings -or $script:ApplyingPreset) {
+        return
+    }
+
+    $script:CustomPreset = Get-CurrentUiSettings
+    $script:ApplyingPreset = $true
+    try {
+        Set-ComboByTag $PresetCombo "custom" "custom"
+    } finally {
+        $script:ApplyingPreset = $false
+    }
+    Update-PresetDescription
+    Save-UiConfig
+}
+
+function Update-LastCapturePreview {
+    if ((Get-ComboTag $OutputModeCombo "normal") -ne "debug") {
+        $script:LastCaptureWriteTicks = 0
+        $LastCaptureImage.Source = $null
+        $LastCaptureImage.Visibility = [System.Windows.Visibility]::Collapsed
+        $LastCapturePlaceholder.Text = "Disponível na saída detalhada."
+        $LastCapturePlaceholder.Visibility = [System.Windows.Visibility]::Visible
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $LastCapturePath)) {
+        $script:LastCaptureWriteTicks = 0
+        $LastCaptureImage.Source = $null
+        $LastCaptureImage.Visibility = [System.Windows.Visibility]::Collapsed
+        $LastCapturePlaceholder.Text = "Aguardando captura detalhada"
+        $LastCapturePlaceholder.Visibility = [System.Windows.Visibility]::Visible
+        return
+    }
+
+    try {
+        $captureFile = Get-Item -LiteralPath $LastCapturePath
+        $bytes = [System.IO.File]::ReadAllBytes($LastCapturePath)
+        $stream = New-Object System.IO.MemoryStream(,$bytes)
+        try {
+            $bitmap = New-Object System.Windows.Media.Imaging.BitmapImage
+            $bitmap.BeginInit()
+            $bitmap.CacheOption = [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad
+            $bitmap.StreamSource = $stream
+            $bitmap.EndInit()
+            $bitmap.Freeze()
+        } finally {
+            $stream.Dispose()
+        }
+        $LastCaptureImage.Source = $bitmap
+        $script:LastCaptureWriteTicks = $captureFile.LastWriteTimeUtc.Ticks
+        $LastCaptureImage.Visibility = [System.Windows.Visibility]::Visible
+        $LastCapturePlaceholder.Visibility = [System.Windows.Visibility]::Collapsed
+    } catch {
+        $LastCaptureImage.Source = $null
+        $LastCaptureImage.Visibility = [System.Windows.Visibility]::Collapsed
+        $LastCapturePlaceholder.Text = "Aguardando captura detalhada"
+        $LastCapturePlaceholder.Visibility = [System.Windows.Visibility]::Visible
+    }
+}
+
+function Sync-CapturePreviewUpdates {
+    $detailedOutput = (Get-ComboTag $OutputModeCombo "normal") -eq "debug"
+    $agentRunning = $script:ActiveKind -eq "agent" -and $script:ActiveProcess -and -not $script:ActiveProcess.HasExited
+
+    Update-LastCapturePreview
+    if ($detailedOutput -and $agentRunning) {
+        $script:CaptureTimer.Start()
+    } else {
+        $script:CaptureTimer.Stop()
+    }
+}
+
 function Save-UiConfig {
     if ($script:LoadingSettings) {
         return
@@ -262,6 +507,8 @@ function Save-UiConfig {
         $data["advanced_memory"] = [bool]$AdvancedMemoryCheck.IsChecked
         $data["smart_recovery"] = [bool]$SmartRecoveryCheck.IsChecked
         $data["allow_menu"] = [bool]$MenuActionsCheck.IsChecked
+        $data["selected_preset"] = Get-ComboTag $PresetCombo "default"
+        $data["custom_preset"] = if ($script:CustomPreset) { $script:CustomPreset } else { Get-CurrentUiSettings }
         $data["special_init"] = $processName.ToLowerInvariant() -in @("isaac-ng.exe", "cuphead.exe")
         $data["port"] = 5555
 
@@ -409,6 +656,7 @@ function Show-Page {
         default {
             $OverviewPage.Visibility = [System.Windows.Visibility]::Visible
             $NavOverview.Tag = "active"
+            Sync-CapturePreviewUpdates
         }
     }
 }
@@ -429,7 +677,8 @@ function Set-ConfigurationEnabled {
     foreach ($control in @(
         $ProcessCombo, $ManualProcessBox, $RefreshButton, $ModelCombo, $BackendCombo,
         $RuntimeModeCombo, $OutputModeCombo, $GameModeCombo, $AgentSlotCombo,
-        $MultimodalSupervisorCheck, $AdvancedMemoryCheck, $SmartRecoveryCheck, $MenuActionsCheck
+        $MultimodalSupervisorCheck, $AdvancedMemoryCheck, $SmartRecoveryCheck, $MenuActionsCheck,
+        $PresetCombo
     )) {
         $control.IsEnabled = $Enabled
     }
@@ -684,6 +933,7 @@ function Start-LoggedPython {
     if ($Kind -eq "agent") {
         $script:AgentProcess = $proc
         Set-OperationalState "starting"
+        Sync-CapturePreviewUpdates
     } else {
         Set-OperationalState "diagnosing"
     }
@@ -739,6 +989,7 @@ function Complete-ActiveProcess {
     $stopWasRequested = $null -ne $script:StopRequestedAt
     Append-Log ("Processo encerrado com código {0}" -f $exitCode)
     $script:LogTimer.Stop()
+    $script:CaptureTimer.Stop()
 
     if ($script:StopFilePath) {
         Remove-Item -LiteralPath $script:StopFilePath -Force -ErrorAction SilentlyContinue
@@ -749,6 +1000,7 @@ function Complete-ActiveProcess {
     $script:StopFilePath = $null
     $script:StopRequestedAt = $null
     $script:ForcedStopIssued = $false
+    Update-LastCapturePreview
 
     if ($kind -eq "diagnostic") {
         if ($exitCode -eq 0) {
@@ -793,6 +1045,27 @@ $script:LogTimer.Add_Tick({
     }
 })
 
+$script:CaptureTimer.Add_Tick({
+    try {
+        if ((Get-ComboTag $OutputModeCombo "normal") -ne "debug" -or
+            $script:ActiveKind -ne "agent" -or
+            -not $script:ActiveProcess -or
+            $script:ActiveProcess.HasExited) {
+            $script:CaptureTimer.Stop()
+            return
+        }
+
+        if (Test-Path -LiteralPath $LastCapturePath) {
+            $writeTicks = (Get-Item -LiteralPath $LastCapturePath).LastWriteTimeUtc.Ticks
+            if ($writeTicks -ne $script:LastCaptureWriteTicks) {
+                Update-LastCapturePreview
+            }
+        }
+    } catch {
+        # A prévia é opcional e nunca deve interferir na execução do agente.
+    }
+})
+
 $TitleBar.Add_MouseLeftButtonDown({
     param($sender, $eventArgs)
     if ($eventArgs.ClickCount -eq 2) {
@@ -825,14 +1098,42 @@ $ProcessCombo.Add_SelectionChanged({
 })
 $ManualProcessBox.Add_TextChanged({ Update-Readiness })
 
+$PresetCombo.Add_SelectionChanged({
+    if ($script:LoadingSettings -or $script:ApplyingPreset) {
+        return
+    }
+
+    $selectedPreset = Get-ComboTag $PresetCombo "default"
+    if ($selectedPreset -eq "custom") {
+        if (-not $script:CustomPreset) {
+            $script:CustomPreset = Get-CurrentUiSettings
+        }
+        Set-UiSettings $script:CustomPreset
+    } else {
+        Set-UiSettings (Get-PresetSettings $selectedPreset)
+    }
+    Update-PresetDescription
+    Save-UiConfig
+})
+
 $configurationCombos = @($ModelCombo, $BackendCombo, $RuntimeModeCombo, $OutputModeCombo, $GameModeCombo, $AgentSlotCombo)
 foreach ($combo in $configurationCombos) {
-    $combo.Add_SelectionChanged({ Update-Readiness })
+    $combo.Add_SelectionChanged({
+        Update-Readiness
+        Set-CustomPresetFromUi
+    })
 }
+$OutputModeCombo.Add_SelectionChanged({ Sync-CapturePreviewUpdates })
 $configurationToggles = @($MultimodalSupervisorCheck, $AdvancedMemoryCheck, $SmartRecoveryCheck, $MenuActionsCheck)
 foreach ($toggle in $configurationToggles) {
-    $toggle.Add_Checked({ Update-Readiness })
-    $toggle.Add_Unchecked({ Update-Readiness })
+    $toggle.Add_Checked({
+        Update-Readiness
+        Set-CustomPresetFromUi
+    })
+    $toggle.Add_Unchecked({
+        Update-Readiness
+        Set-CustomPresetFromUi
+    })
 }
 
 $StartButton.Add_Click({
@@ -878,6 +1179,7 @@ $ClearLogButton.Add_Click({
 
 $window.Add_Closing({
     param($sender, $eventArgs)
+    $script:CaptureTimer.Stop()
     Save-UiConfig
     if ($script:ActiveProcess -and -not $script:ActiveProcess.HasExited -and -not $script:CloseAfterStop) {
         $eventArgs.Cancel = $true
@@ -898,8 +1200,10 @@ $window.Add_ContentRendered({
 })
 
 Load-UiConfig
+Initialize-PresetState
 Refresh-Processes
 $script:LoadingSettings = $false
+Sync-CapturePreviewUpdates
 Update-Readiness
 Set-OperationalState "idle"
 Show-Page "overview"

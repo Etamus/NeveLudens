@@ -116,11 +116,31 @@ BUTTON_PRESS_THRES = 0.5
 
 PATH_DEBUG = PATH_REPO / "debug"
 PATH_OUT = (PATH_REPO / "out" / CKPT_NAME).resolve()
+PATH_LAST_MODEL_CAPTURE = (PATH_REPO / "out" / "last_model_capture.png").resolve()
 
 PATH_MP4_DEBUG = None
 PATH_MP4_CLEAN = None
 PATH_ACTIONS = None
 PATH_SUPERVISOR = None
+last_capture_warning_shown = False
+
+
+def save_last_model_capture(image):
+    """Persist one replaceable preview without creating per-frame artifacts."""
+    global last_capture_warning_shown
+    temporary_path = PATH_LAST_MODEL_CAPTURE.with_suffix(".tmp.png")
+    try:
+        PATH_LAST_MODEL_CAPTURE.parent.mkdir(parents=True, exist_ok=True)
+        image.save(temporary_path, format="PNG", compress_level=1)
+        os.replace(temporary_path, PATH_LAST_MODEL_CAPTURE)
+    except Exception as exc:
+        if not last_capture_warning_shown:
+            print(f"Aviso: não foi possível salvar a última captura do modelo: {exc}")
+            last_capture_warning_shown = True
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 if debug_outputs:
     PATH_DEBUG.mkdir(parents=True, exist_ok=True)
@@ -516,6 +536,7 @@ with debug_recorder_context as debug_recorder:
                 obs = preprocess_img(model_raw_obs)
                 if debug_outputs:
                     obs.save(PATH_DEBUG / f"{step_count:05d}.png")
+                    save_last_model_capture(obs)
                 perception_state = supervisor.observe(obs, step_count)
                 advanced_memory_state = {}
                 if advanced_memory is not None and advanced_memory.enabled:

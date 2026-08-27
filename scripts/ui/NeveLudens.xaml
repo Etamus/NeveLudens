@@ -740,6 +740,52 @@
                                         </Grid>
                                     </Border>
 
+                                    <Border Margin="0,16,0,0" Style="{StaticResource Section}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="24"/>
+                                                <ColumnDefinition Width="1.45*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource SectionTitle}" FontWeight="Bold" Margin="0,0,0,32" Text="Predefinições"/>
+                                                <TextBlock Style="{StaticResource FieldLabel}" Foreground="{DynamicResource TextMutedBrush}" Text="Configuração"/>
+                                                <ComboBox x:Name="PresetCombo" Height="42">
+                                                    <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
+                                                    <ComboBoxItem Content="Desempenho" Tag="performance"/>
+                                                    <ComboBoxItem Content="Qualidade" Tag="quality"/>
+                                                    <ComboBoxItem Content="Personalizada" Tag="custom" Visibility="Collapsed" IsHitTestVisible="False"/>
+                                                </ComboBox>
+                                                <TextBlock x:Name="PresetDescriptionText"
+                                                           Margin="8,12,0,0"
+                                                           Style="{StaticResource CaptionText}"
+                                                           TextWrapping="Wrap"/>
+                                            </StackPanel>
+
+                                            <Border Grid.Column="2"
+                                                    Height="188"
+                                                    Background="#080808"
+                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="7"
+                                                    ClipToBounds="True">
+                                                <Grid>
+                                                    <Image x:Name="LastCaptureImage"
+                                                           Stretch="Uniform"
+                                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                                           Visibility="Collapsed"/>
+                                                    <TextBlock x:Name="LastCapturePlaceholder"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource TextMutedBrush}"
+                                                               FontSize="12"
+                                                               Text="Disponível na saída detalhada."/>
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+
                                 </StackPanel>
                             </ScrollViewer>
                         </Grid>
