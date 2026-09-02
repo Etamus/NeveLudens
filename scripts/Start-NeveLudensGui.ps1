@@ -187,6 +187,8 @@ $script:LogTimer = New-Object System.Windows.Threading.DispatcherTimer
 $script:LogTimer.Interval = [TimeSpan]::FromMilliseconds(400)
 $script:CaptureTimer = New-Object System.Windows.Threading.DispatcherTimer
 $script:CaptureTimer.Interval = [TimeSpan]::FromMilliseconds(100)
+$script:NotificationTimer = New-Object System.Windows.Threading.DispatcherTimer
+$script:NotificationTimer.Interval = [TimeSpan]::FromSeconds(6)
 
 function Get-Brush {
     param([string]$Name)
@@ -628,11 +630,18 @@ function Show-Notification {
     }
     $NotificationDetail.Foreground = Get-Brush "TextSecondaryBrush"
     $NotificationBar.Visibility = [System.Windows.Visibility]::Visible
+    $script:NotificationTimer.Stop()
+    $script:NotificationTimer.Start()
 }
 
 function Hide-Notification {
+    $script:NotificationTimer.Stop()
     $NotificationBar.Visibility = [System.Windows.Visibility]::Collapsed
 }
+
+$script:NotificationTimer.Add_Tick({
+    Hide-Notification
+})
 
 function Show-Page {
     param([ValidateSet("overview", "settings", "diagnostics")][string]$Page)
@@ -1180,6 +1189,7 @@ $ClearLogButton.Add_Click({
 $window.Add_Closing({
     param($sender, $eventArgs)
     $script:CaptureTimer.Stop()
+    $script:NotificationTimer.Stop()
     Save-UiConfig
     if ($script:ActiveProcess -and -not $script:ActiveProcess.HasExited -and -not $script:CloseAfterStop) {
         $eventArgs.Cancel = $true
