@@ -14,6 +14,7 @@ class GameProfile:
     trigger_deadzone: int = 10
     right_stick_from_buttons: bool = False
     low_motion_limit: int = 12
+    failed_movement_limit: int = 3
     repeated_action_limit: int = 10
     loading_wait_limit: int = 6
     unstuck_cooldown_steps: int = 8

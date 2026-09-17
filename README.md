@@ -47,12 +47,11 @@ Abre a interface principal em WPF. O `iniciar.bat` chama a GUI local por PowerSh
 - Digitar manualmente o nome do `.exe`.
 - Escolher a captura: `auto`, `dxcam` ou `pyautogui`.
 - Escolher o modo de captura: `Precisão` ou `Tempo real`.
-- Escolher a saída de depuração: `Simples` ou `Debug`.
+- Ativar ou desativar a saída de depuração detalhada.
 - Escolher o modo de jogo: `Padrão`, `Jogo de luta` ou `Tela dividida`.
 - Escolher o modo de jogador: `Automático`, `Player 2` ou `Jogador 2 (Co-op)`.
 - Escolher o supervisor multimodal: `Desativado` ou `Ativado`.
-- Ligar ou desligar a recuperação inteligente.
-- Ligar ou desligar a memória avançada.
+- Escolher o nível da Recuperação inteligente: `Padrão`, `Temporário` ou `Persistente`.
 - Ativar ou desativar **Permitir acesso de menus**, que controla `START`, `BACK` e `GUIDE`.
 - Iniciar e parar o agente.
 - Rodar diagnóstico de captura.
@@ -68,8 +67,9 @@ Padrões atuais:
 - Modo de jogo padrão: `Padrão`, sem filtro extra sobre a IA.
 - Modo de jogador padrão: `Automático`, mantendo o comportamento atual.
 - Supervisor multimodal padrão: `Desativado`, mantendo o comportamento atual.
-- Recuperação inteligente: ligada por padrão.
-- Memória avançada: desligada por padrão, mantendo o comportamento atual.
+- Recuperação inteligente: `Temporário` por padrão.
+- Horizonte reduzido: desligado por padrão; quando ligado, executa até 6 das 18 ações previstas antes de observar novamente.
+- Calibração automática: desligada por padrão; aprende passivamente a resposta dos movimentos durante a sessão.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
 Modos de captura:
@@ -80,7 +80,7 @@ Modos de captura:
 Saída de depuração:
 
 - `Simples`: não salva PNG por frame, vídeo debug, vídeo limpo, ações JSON ou log detalhado do supervisor.
-- `Debug`: salva os mesmos artefatos de depuração usados anteriormente.
+- `Detalhado`: salva os mesmos artefatos de depuração usados anteriormente.
 
 Modo de jogo:
 
@@ -111,17 +111,23 @@ Supervisor multimodal:
 
 Recuperação inteligente:
 
-- Une memória temporal e anti-loop em uma única opção.
-- Quando ligada, guarda os últimos frames resumidos, ações e eventos para saber se a tela está parada ou se a IA repetiu o mesmo comando.
-- Quando detecta travamento ou repetição forte, permite acionar skills de recuperação conforme o perfil interno do jogo.
+- `Padrão`: não mantém memória temporal, não executa anti-loop e não cria memória persistente.
+- `Temporário`: mantém memória durante a sessão, compara movimento enviado com o resultado visual e aplica recuperação conservadora quando necessário.
+- `Persistente`: inclui tudo do nível Temporário e acrescenta lugares, resultados por jogo, arquivo em `memories/` e resumo para a VLM.
+- Ficar parado, atacar ou esperar não é suficiente para acionar recuperação; são exigidas várias tentativas reais de movimento sem resultado.
+- A recuperação altera somente o movimento necessário, preservando câmera e botões previstos pelo modelo.
 
-Memória avançada:
+Horizonte reduzido:
 
-- Desligada por padrão. Quando desligada, não carrega, salva nem altera nada.
-- Quando ligada, cria memória visual curta, memória de lugares, memória de resultado, memória por jogo e resumo compacto para a VLM.
-- Salva dados por processo em `memories/<jogo>.json`.
-- Pode aplicar uma tentativa curta de rota alternativa apenas quando detecta loop visual claro ou vários passos sem progresso.
-- Se o Supervisor multimodal estiver ligado, envia um resumo compacto para a VLM evitar repetir a última tentativa ruim.
+- É uma opção isolada e desligada por padrão.
+- Quando ligada, usa as primeiras 6 ações de cada bloco de 18 e então solicita uma nova observação.
+- Aumenta a frequência de reavaliação do cenário, com o custo de fazer mais inferências durante a sessão.
+
+Calibração automática:
+
+- É passiva: não executa testes próprios nem toma o controle durante a inicialização.
+- Aprende quais direções produzem resposta visual e ajuda a recuperação a evitar a direção que acabou de falhar.
+- Só reforça movimentos analógicos fracos depois de observar repetidamente que comandos fortes funcionam e comandos fracos não.
 
 ### `instalar.bat`
 
@@ -182,11 +188,9 @@ Esses números ajudam a definir expectativas. O modelo generalista não tem o me
 
 ### Recuperação inteligente
 
-`neveludens/memory.py` guarda histórico curto de frames, ações e eventos. Esse histórico alimenta o anti-loop e as skills de recuperação. Na interface, memória temporal e anti-loop aparecem juntos como **Recuperação inteligente**.
+No nível `Temporário`, `neveludens/memory.py` guarda histórico curto de frames, ações e eventos. A recuperação compara o movimento realmente enviado com o frame seguinte, evitando reagir apenas porque a tela ficou parada.
 
-### Memória avançada
-
-`neveludens/advanced_memory.py` é uma camada opcional e persistente. Ela reconhece imagens parecidas por hash visual, agrupa lugares visitados, registra quais padrões de ação deram progresso ou não e salva um arquivo por jogo em `memories/`.
+No nível `Persistente`, `neveludens/advanced_memory.py` também reconhece imagens parecidas por hash visual, agrupa lugares visitados, registra quais padrões de ação deram progresso ou não e salva um arquivo por jogo em `memories/`.
 
 Quando ligada junto do Supervisor multimodal, ela envia um resumo curto para a VLM com sinais como "mesmo lugar há muitos passos", "última ação não mudou a cena" e "área vista recentemente". Isso ajuda a VLM orientar uma rota diferente sem receber uma lista enorme de prints antigos.
 
@@ -199,8 +203,8 @@ Quando ligada junto do Supervisor multimodal, ela envia um resumo curto para a V
 `neveludens/skills.py` contém rotinas reutilizáveis:
 
 - `wait_loading`: reduz comandos durante telas de loading provável.
-- `unstuck`: força uma ação de destravamento quando a imagem muda pouco.
-- `break_repetition`: quebra padrões de ação repetidos demais.
+- `unstuck`: tenta uma direção alternativa após várias ações de movimento sem resultado visual.
+- `break_repetition`: quebra somente padrões repetidos de movimento que também não produziram progresso.
 
 ### Modo de luta
 
@@ -255,23 +259,22 @@ Observação importante: o pacote Python `vgamepad` é instalado na `.venv`, mas
 4. Selecione o jogo ou digite o nome do `.exe`.
 5. Deixe a captura em `auto`.
 6. Deixe o modo de captura em **Precisão** ou escolha **Tempo real**.
-7. Deixe a saída de depuração em **Simples** ou escolha **Debug** para gravar PNG/vídeos/logs detalhados.
+7. Deixe a saída de depuração desligada para **Simples** ou ative para **Detalhado**, gravando PNG, vídeos e logs detalhados.
 8. Deixe o modo de jogo em **Padrão**, escolha **Jogo de luta** para Street Fighter 6 ou **Tela dividida** para jogos co-op/split-screen em que a IA deve enxergar apenas a metade esquerda da tela.
 9. Deixe o modo de jogador em **Automático**, escolha **Player 2** para entrada lateral padrão ou **Jogador 2 (Co-op)** para a macro de confirmação/esquerda/confirmação.
-10. Deixe **Recuperação inteligente** ligada para usar memória temporal e anti-loop juntos.
-11. Deixe **Memória avançada** desligada para manter o padrão, ou ligue quando quiser memória visual/persistente por jogo.
-12. Clique em **Iniciar**.
-13. Para parar, clique em **Parar** no mesmo botão.
+10. Deixe **Recuperação inteligente** em **Temporário**, escolha **Persistente** para salvar lugares e resultados por jogo ou **Padrão** para não usar essas camadas.
+11. Clique em **Iniciar**.
+12. Para parar, clique em **Parar** no mesmo botão.
 
 Se o agente parecer cego, vendo tela preta ou reagindo a uma imagem congelada, use **Diagnosticar** na própria interface.
 
 ## Saídas
 
-- `out/<modelo>/*_DEBUG.mp4`: vídeo com visualização de debug, salvo apenas no modo `Debug`.
-- `out/<modelo>/*_CLEAN.mp4`: vídeo limpo da captura, salvo apenas no modo `Debug`.
-- `out/<modelo>/*_ACTIONS.json`: ações finais enviadas ao jogo, salvo apenas no modo `Debug`.
-- `out/<modelo>/*_SUPERVISOR.json`: percepção, memória, objetivo e skill usada, salvo apenas no modo `Debug`.
-- `memories/<jogo>.json`: memória avançada persistente por processo, criada apenas quando **Memória avançada** está ligada.
+- `out/<modelo>/*_DEBUG.mp4`: vídeo com visualização de debug, salvo apenas com a saída detalhada.
+- `out/<modelo>/*_CLEAN.mp4`: vídeo limpo da captura, salvo apenas com a saída detalhada.
+- `out/<modelo>/*_ACTIONS.json`: ações finais enviadas ao jogo, salvo apenas com a saída detalhada.
+- `out/<modelo>/*_SUPERVISOR.json`: percepção, memória, objetivo e skill usada, salvo apenas com a saída detalhada.
+- `memories/<jogo>.json`: memória persistente por processo, criada apenas quando **Recuperação inteligente** está em `Persistente`.
 - `logs/server_*.log`: carregamento do modelo e servidor.
 - `logs/gui_run_*.log`: log espelho da interface de início.
 

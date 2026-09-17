@@ -780,7 +780,7 @@
                                                                VerticalAlignment="Center"
                                                                Foreground="{DynamicResource TextMutedBrush}"
                                                                FontSize="12"
-                                                               Text="Disponível na saída detalhada."/>
+                                                               Text="Disponível na saída de depuração."/>
                                                 </Grid>
                                             </Border>
                                         </Grid>
@@ -845,10 +845,7 @@
                                                     <TextBlock FontSize="13" FontWeight="SemiBold" Text="Saída de depuração"/>
                                                     <TextBlock Margin="0,3,20,0" Style="{StaticResource CaptionText}" Text="Armazenamento de imagens, vídeos e artefatos de sessão." TextWrapping="Wrap"/>
                                                 </StackPanel>
-                                                <ComboBox x:Name="OutputModeCombo" Grid.Column="1">
-                                                    <ComboBoxItem Content="Simples" Tag="normal" IsSelected="True"/>
-                                                    <ComboBoxItem Content="Detalhado" Tag="debug"/>
-                                                </ComboBox>
+                                                <CheckBox x:Name="DetailedOutputCheck" Grid.Column="1" Style="{StaticResource ToggleSwitch}" IsChecked="False"/>
                                             </Grid>
                                         </StackPanel>
                                     </Border>
@@ -887,6 +884,19 @@
                                     <Border Margin="0,16,0,0" Style="{StaticResource Section}">
                                         <StackPanel>
                                             <TextBlock Style="{StaticResource SectionTitle}" FontWeight="Bold" Margin="0,0,0,26" Text="Recursos avançados"/>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="250"/></Grid.ColumnDefinitions>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock FontSize="13" FontWeight="SemiBold" Text="Recuperação inteligente"/>
+                                                    <TextBlock Margin="0,3,20,0" Style="{StaticResource CaptionText}" Text="Define a persistência da memória e corrige as ações do modelo." TextWrapping="Wrap"/>
+                                                </StackPanel>
+                                                <ComboBox x:Name="MemoryRecoveryCombo" Grid.Column="1">
+                                                    <ComboBoxItem Content="Padrão" Tag="disabled"/>
+                                                    <ComboBoxItem Content="Temporário" Tag="temporary" IsSelected="True"/>
+                                                    <ComboBoxItem Content="Persistente" Tag="persistent"/>
+                                                </ComboBox>
+                                            </Grid>
+                                            <Border Style="{StaticResource SettingDivider}"/>
                                             <CheckBox x:Name="MultimodalSupervisorCheck" Style="{StaticResource ToggleSwitch}" IsChecked="False">
                                                 <StackPanel>
                                                     <TextBlock FontSize="13" FontWeight="SemiBold" Text="Supervisor multimodal"/>
@@ -894,17 +904,17 @@
                                                 </StackPanel>
                                             </CheckBox>
                                             <Border Style="{StaticResource SettingDivider}"/>
-                                            <CheckBox x:Name="AdvancedMemoryCheck" Style="{StaticResource ToggleSwitch}" IsChecked="False">
+                                            <CheckBox x:Name="ReducedActionHorizonCheck" Style="{StaticResource ToggleSwitch}" IsChecked="False">
                                                 <StackPanel>
-                                                    <TextBlock FontSize="13" FontWeight="SemiBold" Text="Memória avançada"/>
-                                                    <TextBlock Margin="0,3,24,0" Style="{StaticResource CaptionText}" Text="Mantém memória visual, lugares e resultados para a VLM."/>
+                                                    <TextBlock FontSize="13" FontWeight="SemiBold" Text="Horizonte reduzido"/>
+                                                    <TextBlock Margin="0,3,24,0" Style="{StaticResource CaptionText}" Text="Reavalia a imagem após executar uma parte menor das ações previstas."/>
                                                 </StackPanel>
                                             </CheckBox>
                                             <Border Style="{StaticResource SettingDivider}"/>
-                                            <CheckBox x:Name="SmartRecoveryCheck" Style="{StaticResource ToggleSwitch}" IsChecked="True">
+                                            <CheckBox x:Name="AutoControlCalibrationCheck" Style="{StaticResource ToggleSwitch}" IsChecked="False">
                                                 <StackPanel>
-                                                    <TextBlock FontSize="13" FontWeight="SemiBold" Text="Recuperação inteligente"/>
-                                                    <TextBlock Margin="0,3,24,0" Style="{StaticResource CaptionText}" Text="Habilita memória temporal e recuperação anti-loop."/>
+                                                    <TextBlock FontSize="13" FontWeight="SemiBold" Text="Calibração automática"/>
+                                                    <TextBlock Margin="0,3,24,0" Style="{StaticResource CaptionText}" Text="Aprende passivamente a resposta do movimento e ajusta comandos fracos."/>
                                                 </StackPanel>
                                             </CheckBox>
                                             <Border Style="{StaticResource SettingDivider}"/>

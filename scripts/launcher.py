@@ -17,6 +17,7 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 from neveludens.stop_control import StopRequested, normalize_stop_file, stop_requested
+from neveludens.runtime_options import MEMORY_MODES, memory_mode_label, resolve_memory_mode
 
 
 VENV_PYTHON = REPO / ".venv" / "Scripts" / "python.exe"
@@ -101,24 +102,41 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Optional Qwen3.5 4B visual supervisor. Disabled keeps the original behavior.",
     )
     parser.add_argument(
+        "--memory-mode",
+        choices=MEMORY_MODES,
+        default=None,
+        help="Unified memory and recovery level. Defaults to temporary.",
+    )
+    parser.add_argument(
         "--advanced-memory",
         action="store_true",
         default=False,
-        help="Enable opt-in visual/place/result/per-game memory and VLM summary.",
+        help=argparse.SUPPRESS,
     )
-    recovery_group = parser.add_mutually_exclusive_group()
-    recovery_group.add_argument(
+    parser.add_argument(
+        "--reduced-action-horizon",
+        action="store_true",
+        default=False,
+        help="Execute a short action slice before observing the game again.",
+    )
+    parser.add_argument(
+        "--auto-control-calibration",
+        action="store_true",
+        default=False,
+        help="Passively learn movement response and calibrate weak stick inputs.",
+    )
+    parser.add_argument(
         "--smart-recovery",
         dest="smart_recovery",
         action="store_true",
         default=True,
-        help="Enable temporal memory and anti-loop recovery.",
+        help=argparse.SUPPRESS,
     )
-    recovery_group.add_argument(
+    parser.add_argument(
         "--no-smart-recovery",
         dest="smart_recovery",
         action="store_false",
-        help="Disable temporal memory and anti-loop recovery.",
+        help=argparse.SUPPRESS,
     )
     menu_group = parser.add_mutually_exclusive_group()
     menu_group.add_argument(
@@ -161,6 +179,8 @@ def local_env() -> dict[str, str]:
     env["TORCH_HOME"] = str(REPO / ".cache" / "torch")
     env["PIP_CACHE_DIR"] = str(REPO / ".cache" / "pip")
     env["PATH"] = str(REPO / ".venv" / "Scripts") + os.pathsep + env.get("PATH", "")
+    current_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(REPO) + (os.pathsep + current_pythonpath if current_pythonpath else "")
     return env
 
 
@@ -508,8 +528,9 @@ def run_player(
     game_mode: str,
     agent_slot: str,
     multimodal_supervisor: str,
-    advanced_memory: bool,
-    smart_recovery: bool,
+    memory_mode: str,
+    reduced_action_horizon: bool,
+    auto_control_calibration: bool,
     special_init: bool,
     stop_file: Path | None,
     env: dict[str, str],
@@ -534,14 +555,13 @@ def run_player(
         "--multimodal-supervisor",
         multimodal_supervisor,
     ]
-    if advanced_memory:
-        cmd.append("--advanced-memory")
+    cmd.extend(["--memory-mode", memory_mode])
+    if reduced_action_horizon:
+        cmd.append("--reduced-action-horizon")
+    if auto_control_calibration:
+        cmd.append("--auto-control-calibration")
     if stop_file is not None:
         cmd.extend(["--stop-file", str(stop_file)])
-    if smart_recovery:
-        cmd.append("--smart-recovery")
-    else:
-        cmd.append("--no-smart-recovery")
     if allow_menu:
         cmd.append("--allow-menu")
     else:
@@ -602,8 +622,13 @@ def main(argv: list[str] | None = None) -> int:
     game_mode = args.game_mode
     agent_slot = args.agent_slot
     multimodal_supervisor = args.multimodal_supervisor
-    advanced_memory = args.advanced_memory
-    smart_recovery = args.smart_recovery
+    memory_mode = resolve_memory_mode(
+        args.memory_mode,
+        legacy_advanced_memory=args.advanced_memory,
+        legacy_smart_recovery=args.smart_recovery,
+    )
+    reduced_action_horizon = args.reduced_action_horizon
+    auto_control_calibration = args.auto_control_calibration
     special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init
     print(f"Modelo selecionado: {model_spec['label']}")
     print(f"Checkpoint: {checkpoint_path}")
@@ -619,8 +644,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Modo de jogo: {game_mode}")
     print(f"Modo de jogador: {agent_slot}")
     print(f"Supervisor multimodal: {multimodal_supervisor}")
-    print(f"Memoria avancada: {'ligada' if advanced_memory else 'desligada'}")
-    print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
+    print(f"Recuperacao inteligente: {memory_mode_label(memory_mode)}")
+    print(f"Horizonte reduzido: {'ligado' if reduced_action_horizon else 'desligado'}")
+    print(f"Calibracao automatica: {'ligada' if auto_control_calibration else 'desligada'}")
     print(f"Porta do servidor: {args.port}")
     port = args.port
 
@@ -652,8 +678,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Modo de jogo: {game_mode}")
     print(f"Modo de jogador: {agent_slot}")
     print(f"Supervisor multimodal: {multimodal_supervisor}")
-    print(f"Memoria avancada: {'ligada' if advanced_memory else 'desligada'}")
-    print(f"Recuperacao inteligente: {'ligada' if smart_recovery else 'desligada'}")
+    print(f"Recuperacao inteligente: {memory_mode_label(memory_mode)}")
+    print(f"Horizonte reduzido: {'ligado' if reduced_action_horizon else 'desligado'}")
+    print(f"Calibracao automatica: {'ligada' if auto_control_calibration else 'desligada'}")
     print(f"Ações de menu: {'liberadas' if allow_menu else 'bloqueadas'}")
 
     config.update({
@@ -667,11 +694,14 @@ def main(argv: list[str] | None = None) -> int:
         "game_mode": game_mode,
         "agent_slot": agent_slot,
         "multimodal_supervisor": multimodal_supervisor,
-        "advanced_memory": advanced_memory,
-        "smart_recovery": smart_recovery,
+        "memory_mode": memory_mode,
+        "reduced_action_horizon": reduced_action_horizon,
+        "auto_control_calibration": auto_control_calibration,
         "special_init": special_init,
         "port": port,
     })
+    config.pop("advanced_memory", None)
+    config.pop("smart_recovery", None)
     save_config(config)
 
     try:
@@ -685,8 +715,9 @@ def main(argv: list[str] | None = None) -> int:
             game_mode,
             agent_slot,
             multimodal_supervisor,
-            advanced_memory,
-            smart_recovery,
+            memory_mode,
+            reduced_action_horizon,
+            auto_control_calibration,
             special_init,
             stop_file,
             env,

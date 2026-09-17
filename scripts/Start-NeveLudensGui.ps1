@@ -170,8 +170,8 @@ $controlNames = @(
     "NotificationBar", "NotificationTitle", "NotificationDetail", "NotificationDetailsButton",
     "ProcessCombo", "ManualProcessBox", "RefreshButton",
     "LastCaptureImage", "LastCapturePlaceholder", "PresetCombo", "PresetDescriptionText",
-    "ModelCombo", "BackendCombo", "RuntimeModeCombo", "OutputModeCombo", "GameModeCombo", "AgentSlotCombo",
-    "MultimodalSupervisorCheck", "AdvancedMemoryCheck", "SmartRecoveryCheck", "MenuActionsCheck",
+    "ModelCombo", "BackendCombo", "RuntimeModeCombo", "DetailedOutputCheck", "GameModeCombo", "AgentSlotCombo",
+    "MultimodalSupervisorCheck", "MemoryRecoveryCombo", "ReducedActionHorizonCheck", "AutoControlCalibrationCheck", "MenuActionsCheck",
     "DiagnoseButton", "LogBox", "CopyLogButton", "ClearLogButton"
 )
 
@@ -258,8 +258,9 @@ function Get-PresetSettings {
                 game_mode = "default"
                 agent_slot = "auto"
                 multimodal_supervisor = "disabled"
-                advanced_memory = $false
-                smart_recovery = $true
+                memory_mode = "temporary"
+                reduced_action_horizon = $false
+                auto_control_calibration = $false
                 allow_menu = $false
             }
         }
@@ -272,8 +273,9 @@ function Get-PresetSettings {
                 game_mode = "default"
                 agent_slot = "auto"
                 multimodal_supervisor = "enabled"
-                advanced_memory = $true
-                smart_recovery = $true
+                memory_mode = "persistent"
+                reduced_action_horizon = $false
+                auto_control_calibration = $false
                 allow_menu = $false
             }
         }
@@ -286,12 +288,45 @@ function Get-PresetSettings {
                 game_mode = "default"
                 agent_slot = "auto"
                 multimodal_supervisor = "disabled"
-                advanced_memory = $false
-                smart_recovery = $true
+                memory_mode = "temporary"
+                reduced_action_horizon = $false
+                auto_control_calibration = $false
                 allow_menu = $false
             }
         }
     }
+}
+
+function Get-CompatibleMemoryMode {
+    param($Settings)
+    if (-not $Settings) {
+        return "temporary"
+    }
+
+    $propertyNames = @($Settings.PSObject.Properties.Name)
+    if ($propertyNames -contains "memory_mode" -and
+        [string]$Settings.memory_mode -in @("disabled", "temporary", "persistent")) {
+        return [string]$Settings.memory_mode
+    }
+    if ($propertyNames -contains "advanced_memory" -and [bool]$Settings.advanced_memory) {
+        return "persistent"
+    }
+    if (-not ($propertyNames -contains "smart_recovery") -or [bool]$Settings.smart_recovery) {
+        return "temporary"
+    }
+    return "disabled"
+}
+
+function Get-OutputMode {
+    if ([bool]$DetailedOutputCheck.IsChecked) {
+        return "debug"
+    }
+    return "normal"
+}
+
+function Set-OutputMode {
+    param([string]$Mode)
+    $DetailedOutputCheck.IsChecked = [bool]($Mode -eq "debug")
 }
 
 function Get-CurrentUiSettings {
@@ -299,12 +334,13 @@ function Get-CurrentUiSettings {
         model_choice = Get-ComboTag $ModelCombo "default"
         screenshot_backend = Get-ComboTag $BackendCombo "auto"
         runtime_mode = Get-ComboTag $RuntimeModeCombo "precision"
-        output_mode = Get-ComboTag $OutputModeCombo "normal"
+        output_mode = Get-OutputMode
         game_mode = Get-ComboTag $GameModeCombo "default"
         agent_slot = Get-ComboTag $AgentSlotCombo "auto"
         multimodal_supervisor = if ([bool]$MultimodalSupervisorCheck.IsChecked) { "enabled" } else { "disabled" }
-        advanced_memory = [bool]$AdvancedMemoryCheck.IsChecked
-        smart_recovery = [bool]$SmartRecoveryCheck.IsChecked
+        memory_mode = Get-ComboTag $MemoryRecoveryCombo "temporary"
+        reduced_action_horizon = [bool]$ReducedActionHorizonCheck.IsChecked
+        auto_control_calibration = [bool]$AutoControlCalibrationCheck.IsChecked
         allow_menu = [bool]$MenuActionsCheck.IsChecked
     }
 }
@@ -321,12 +357,13 @@ function Set-UiSettings {
         Set-ComboByTag $ModelCombo ([string]$Settings.model_choice) "default"
         Set-ComboByTag $BackendCombo ([string]$Settings.screenshot_backend) "auto"
         Set-ComboByTag $RuntimeModeCombo ([string]$Settings.runtime_mode) "precision"
-        Set-ComboByTag $OutputModeCombo ([string]$Settings.output_mode) "normal"
+        Set-OutputMode ([string]$Settings.output_mode)
         Set-ComboByTag $GameModeCombo ([string]$Settings.game_mode) "default"
         Set-ComboByTag $AgentSlotCombo ([string]$Settings.agent_slot) "auto"
         $MultimodalSupervisorCheck.IsChecked = [bool]([string]$Settings.multimodal_supervisor -eq "enabled")
-        $AdvancedMemoryCheck.IsChecked = [bool]$Settings.advanced_memory
-        $SmartRecoveryCheck.IsChecked = [bool]$Settings.smart_recovery
+        Set-ComboByTag $MemoryRecoveryCombo (Get-CompatibleMemoryMode $Settings) "temporary"
+        $ReducedActionHorizonCheck.IsChecked = [bool]$Settings.reduced_action_horizon
+        $AutoControlCalibrationCheck.IsChecked = [bool]$Settings.auto_control_calibration
         $MenuActionsCheck.IsChecked = [bool]$Settings.allow_menu
     } finally {
         $script:ApplyingPreset = $previousApplyingPreset
@@ -341,7 +378,8 @@ function Test-UiSettingsMatch {
     }
     foreach ($propertyName in @(
         "model_choice", "screenshot_backend", "runtime_mode", "output_mode", "game_mode",
-        "agent_slot", "multimodal_supervisor", "advanced_memory", "smart_recovery", "allow_menu"
+        "agent_slot", "multimodal_supervisor", "memory_mode", "reduced_action_horizon",
+        "auto_control_calibration", "allow_menu"
     )) {
         if ([string]$Left.$propertyName -ne [string]$Right.$propertyName) {
             return $false
@@ -427,11 +465,11 @@ function Set-CustomPresetFromUi {
 }
 
 function Update-LastCapturePreview {
-    if ((Get-ComboTag $OutputModeCombo "normal") -ne "debug") {
+    if ((Get-OutputMode) -ne "debug") {
         $script:LastCaptureWriteTicks = 0
         $LastCaptureImage.Source = $null
         $LastCaptureImage.Visibility = [System.Windows.Visibility]::Collapsed
-        $LastCapturePlaceholder.Text = "Disponível na saída detalhada."
+        $LastCapturePlaceholder.Text = "Disponível na saída de depuração."
         $LastCapturePlaceholder.Visibility = [System.Windows.Visibility]::Visible
         return
     }
@@ -472,7 +510,7 @@ function Update-LastCapturePreview {
 }
 
 function Sync-CapturePreviewUpdates {
-    $detailedOutput = (Get-ComboTag $OutputModeCombo "normal") -eq "debug"
+    $detailedOutput = (Get-OutputMode) -eq "debug"
     $agentRunning = $script:ActiveKind -eq "agent" -and $script:ActiveProcess -and -not $script:ActiveProcess.HasExited
 
     Update-LastCapturePreview
@@ -495,6 +533,8 @@ function Save-UiConfig {
                 $data[$property.Name] = $property.Value
             }
         }
+        [void]$data.Remove("advanced_memory")
+        [void]$data.Remove("smart_recovery")
 
         $processName = Get-SelectedProcessName
         $data["process"] = $processName
@@ -502,12 +542,13 @@ function Save-UiConfig {
         $data["checkpoint_path"] = Get-ModelPath
         $data["screenshot_backend"] = Get-ComboTag $BackendCombo "auto"
         $data["runtime_mode"] = Get-ComboTag $RuntimeModeCombo "precision"
-        $data["output_mode"] = Get-ComboTag $OutputModeCombo "normal"
+        $data["output_mode"] = Get-OutputMode
         $data["game_mode"] = Get-ComboTag $GameModeCombo "default"
         $data["agent_slot"] = Get-ComboTag $AgentSlotCombo "auto"
         $data["multimodal_supervisor"] = if ([bool]$MultimodalSupervisorCheck.IsChecked) { "enabled" } else { "disabled" }
-        $data["advanced_memory"] = [bool]$AdvancedMemoryCheck.IsChecked
-        $data["smart_recovery"] = [bool]$SmartRecoveryCheck.IsChecked
+        $data["memory_mode"] = Get-ComboTag $MemoryRecoveryCombo "temporary"
+        $data["reduced_action_horizon"] = [bool]$ReducedActionHorizonCheck.IsChecked
+        $data["auto_control_calibration"] = [bool]$AutoControlCalibrationCheck.IsChecked
         $data["allow_menu"] = [bool]$MenuActionsCheck.IsChecked
         $data["selected_preset"] = Get-ComboTag $PresetCombo "default"
         $data["custom_preset"] = if ($script:CustomPreset) { $script:CustomPreset } else { Get-CurrentUiSettings }
@@ -534,12 +575,13 @@ function Load-UiConfig {
     Set-ComboByTag $ModelCombo ([string]$config.model_choice) "default"
     Set-ComboByTag $BackendCombo ([string]$config.screenshot_backend) "auto"
     Set-ComboByTag $RuntimeModeCombo ([string]$config.runtime_mode) "precision"
-    Set-ComboByTag $OutputModeCombo ([string]$config.output_mode) "normal"
+    Set-OutputMode ([string]$config.output_mode)
     Set-ComboByTag $GameModeCombo ([string]$config.game_mode) "default"
     Set-ComboByTag $AgentSlotCombo ([string]$config.agent_slot) "auto"
     $MultimodalSupervisorCheck.IsChecked = [bool]($config.multimodal_supervisor -eq "enabled")
-    $AdvancedMemoryCheck.IsChecked = if ($null -eq $config.advanced_memory) { $false } else { [bool]$config.advanced_memory }
-    $SmartRecoveryCheck.IsChecked = if ($null -eq $config.smart_recovery) { $true } else { [bool]$config.smart_recovery }
+    Set-ComboByTag $MemoryRecoveryCombo (Get-CompatibleMemoryMode $config) "temporary"
+    $ReducedActionHorizonCheck.IsChecked = if ($null -eq $config.reduced_action_horizon) { $false } else { [bool]$config.reduced_action_horizon }
+    $AutoControlCalibrationCheck.IsChecked = if ($null -eq $config.auto_control_calibration) { $false } else { [bool]$config.auto_control_calibration }
     $MenuActionsCheck.IsChecked = if ($null -eq $config.allow_menu) { $false } else { [bool]$config.allow_menu }
 }
 
@@ -685,8 +727,9 @@ function Set-ConfigurationEnabled {
     param([bool]$Enabled)
     foreach ($control in @(
         $ProcessCombo, $ManualProcessBox, $RefreshButton, $ModelCombo, $BackendCombo,
-        $RuntimeModeCombo, $OutputModeCombo, $GameModeCombo, $AgentSlotCombo,
-        $MultimodalSupervisorCheck, $AdvancedMemoryCheck, $SmartRecoveryCheck, $MenuActionsCheck,
+        $RuntimeModeCombo, $DetailedOutputCheck, $GameModeCombo, $AgentSlotCombo,
+        $MultimodalSupervisorCheck, $MemoryRecoveryCombo, $MenuActionsCheck,
+        $ReducedActionHorizonCheck, $AutoControlCalibrationCheck,
         $PresetCombo
     )) {
         $control.IsEnabled = $Enabled
@@ -964,7 +1007,7 @@ function Start-AgentFromUi {
         "--process", $processName,
         "--screenshot-backend", (Get-ComboTag $BackendCombo "auto"),
         "--runtime-mode", (Get-ComboTag $RuntimeModeCombo "precision"),
-        "--output-mode", (Get-ComboTag $OutputModeCombo "normal"),
+        "--output-mode", (Get-OutputMode),
         "--game-mode", (Get-ComboTag $GameModeCombo "default"),
         "--model-choice", (Get-ComboTag $ModelCombo "default"),
         "--agent-slot", (Get-ComboTag $AgentSlotCombo "auto"),
@@ -972,8 +1015,9 @@ function Start-AgentFromUi {
         "--port", "5555",
         "--non-interactive"
     )
-    $launchArgs += if ([bool]$SmartRecoveryCheck.IsChecked) { "--smart-recovery" } else { "--no-smart-recovery" }
-    if ([bool]$AdvancedMemoryCheck.IsChecked) { $launchArgs += "--advanced-memory" }
+    $launchArgs += @("--memory-mode", (Get-ComboTag $MemoryRecoveryCombo "temporary"))
+    if ([bool]$ReducedActionHorizonCheck.IsChecked) { $launchArgs += "--reduced-action-horizon" }
+    if ([bool]$AutoControlCalibrationCheck.IsChecked) { $launchArgs += "--auto-control-calibration" }
     $launchArgs += if ([bool]$MenuActionsCheck.IsChecked) { "--allow-menu" } else { "--block-menu" }
     Start-LoggedPython -Arguments $launchArgs -StartedMessage ("Iniciando NeveLudens para {0}..." -f $processName) -Kind "agent"
 }
@@ -1056,7 +1100,7 @@ $script:LogTimer.Add_Tick({
 
 $script:CaptureTimer.Add_Tick({
     try {
-        if ((Get-ComboTag $OutputModeCombo "normal") -ne "debug" -or
+        if ((Get-OutputMode) -ne "debug" -or
             $script:ActiveKind -ne "agent" -or
             -not $script:ActiveProcess -or
             $script:ActiveProcess.HasExited) {
@@ -1125,15 +1169,20 @@ $PresetCombo.Add_SelectionChanged({
     Save-UiConfig
 })
 
-$configurationCombos = @($ModelCombo, $BackendCombo, $RuntimeModeCombo, $OutputModeCombo, $GameModeCombo, $AgentSlotCombo)
+$configurationCombos = @($ModelCombo, $BackendCombo, $RuntimeModeCombo, $GameModeCombo, $AgentSlotCombo, $MemoryRecoveryCombo)
 foreach ($combo in $configurationCombos) {
     $combo.Add_SelectionChanged({
         Update-Readiness
         Set-CustomPresetFromUi
     })
 }
-$OutputModeCombo.Add_SelectionChanged({ Sync-CapturePreviewUpdates })
-$configurationToggles = @($MultimodalSupervisorCheck, $AdvancedMemoryCheck, $SmartRecoveryCheck, $MenuActionsCheck)
+$DetailedOutputCheck.Add_Checked({
+    Sync-CapturePreviewUpdates
+})
+$DetailedOutputCheck.Add_Unchecked({
+    Sync-CapturePreviewUpdates
+})
+$configurationToggles = @($DetailedOutputCheck, $MultimodalSupervisorCheck, $ReducedActionHorizonCheck, $AutoControlCalibrationCheck, $MenuActionsCheck)
 foreach ($toggle in $configurationToggles) {
     $toggle.Add_Checked({
         Update-Readiness

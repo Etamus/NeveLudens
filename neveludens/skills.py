@@ -7,23 +7,35 @@ import numpy as np
 from neveludens.memory import TemporalMemory, action_value
 from neveludens.perception import PerceptionState
 from neveludens.profiles import GameProfile
+from neveludens.control_calibration import AutomaticControlCalibration
 
 
-UNSTUCK_DIRECTIONS = [
-    (26000, 0),
-    (-26000, 0),
-    (0, -26000),
-    (0, 26000),
-    (22000, -18000),
-    (-22000, 18000),
-]
+DIRECTION_AXES = {
+    "right": (25000, 0),
+    "left": (-25000, 0),
+    "up": (0, -25000),
+    "down": (0, 25000),
+}
 
-REPETITION_BREAK_DIRECTIONS = [
-    (0, -24000),
-    (24000, 0),
-    (0, 24000),
-    (-24000, 0),
-]
+
+def choose_escape_direction(
+    memory: TemporalMemory,
+    calibration: AutomaticControlCalibration | None,
+    attempt: int,
+) -> tuple[str, int, int]:
+    failed = memory.last_failed_direction
+    if calibration is not None and calibration.enabled:
+        candidates = calibration.ranked_escape_directions(failed)
+    else:
+        alternatives = {
+            "right": ["up", "down", "left"],
+            "left": ["up", "down", "right"],
+            "up": ["left", "right", "down"],
+            "down": ["left", "right", "up"],
+        }
+        candidates = alternatives.get(failed, ["right", "left", "up", "down"])
+    direction = candidates[attempt % len(candidates)]
+    return direction, *DIRECTION_AXES[direction]
 
 @dataclass
 class SkillDecision:
@@ -104,6 +116,7 @@ class WaitLoadingSkill:
         memory: TemporalMemory,
         profile: GameProfile,
         step: int,
+        calibration: AutomaticControlCalibration | None = None,
     ) -> SkillDecision | None:
         if memory.loading_streak < profile.loading_wait_limit:
             return None
@@ -127,25 +140,26 @@ class UnstuckSkill:
         memory: TemporalMemory,
         profile: GameProfile,
         step: int,
+        calibration: AutomaticControlCalibration | None = None,
     ) -> SkillDecision | None:
-        if memory.low_motion_streak < profile.low_motion_limit:
+        if memory.movement_failure_streak < profile.failed_movement_limit:
             return None
         if not memory.can_use_skill(self.name, step, profile.unstuck_cooldown_steps):
             return None
 
         attempt = memory.skill_counts.get(self.name, 0)
-        lx, ly = UNSTUCK_DIRECTIONS[attempt % len(UNSTUCK_DIRECTIONS)]
-        rx, ry = UNSTUCK_DIRECTIONS[(attempt + 2) % len(UNSTUCK_DIRECTIONS)]
-        changed = min(profile.unstuck_actions, len(actions))
+        direction, lx, ly = choose_escape_direction(memory, calibration, attempt)
+        changed = min(max(4, profile.unstuck_actions // 2), len(actions))
 
         for action in actions[:changed]:
             set_axis(action, "AXIS_LEFTX", lx)
             set_axis(action, "AXIS_LEFTY", ly)
-            set_axis(action, "AXIS_RIGHTX", rx)
-            set_axis(action, "AXIS_RIGHTY", ry)
             action["_SKILL"] = self.name
 
-        reason = f"low visual motion for {memory.low_motion_streak} steps"
+        reason = (
+            f"movement had no visual result for {memory.movement_failure_streak} steps; "
+            f"trying {direction}"
+        )
         memory.mark_skill(self.name, step, reason)
         return SkillDecision(self.name, reason, changed)
 
@@ -160,24 +174,28 @@ class BreakRepetitionSkill:
         memory: TemporalMemory,
         profile: GameProfile,
         step: int,
+        calibration: AutomaticControlCalibration | None = None,
     ) -> SkillDecision | None:
-        if memory.repeated_action_streak < profile.repeated_action_limit:
+        if memory.repeated_movement_streak < profile.repeated_action_limit:
+            return None
+        if memory.movement_failure_streak < 2:
             return None
         if not memory.can_use_skill(self.name, step, profile.repetition_cooldown_steps):
             return None
 
         attempt = memory.skill_counts.get(self.name, 0)
-        lx, ly = REPETITION_BREAK_DIRECTIONS[attempt % len(REPETITION_BREAK_DIRECTIONS)]
+        direction, lx, ly = choose_escape_direction(memory, calibration, attempt + 1)
         changed = min(max(4, profile.unstuck_actions // 2), len(actions))
 
         for action in actions[:changed]:
             set_axis(action, "AXIS_LEFTX", lx)
             set_axis(action, "AXIS_LEFTY", ly)
-            action["SOUTH"] = 0
-            action["WEST"] = 0
             action["_SKILL"] = self.name
 
-        reason = f"same action signature for {memory.repeated_action_streak} steps"
+        reason = (
+            f"repeated failed movement for {memory.repeated_movement_streak} steps; "
+            f"trying {direction}"
+        )
         memory.mark_skill(self.name, step, reason)
         return SkillDecision(self.name, reason, changed)
 
@@ -198,6 +216,7 @@ class SkillLibrary:
         memory: TemporalMemory,
         profile: GameProfile,
         step: int,
+        calibration: AutomaticControlCalibration | None = None,
     ) -> SkillDecision | None:
         if not self.enabled:
             return None
@@ -206,7 +225,7 @@ class SkillLibrary:
             skill = self.skills.get(name)
             if skill is None:
                 continue
-            decision = skill.apply(actions, perception, memory, profile, step)
+            decision = skill.apply(actions, perception, memory, profile, step, calibration)
             if decision is not None:
                 return decision
         return None

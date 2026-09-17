@@ -21,6 +21,7 @@ from neveludens.advanced_memory import AdvancedGameMemory
 from neveludens.memory import action_value
 from neveludens.multimodal_supervisor import AsyncMultimodalSupervisor
 from neveludens.stop_control import normalize_stop_file, raise_if_stop_requested
+from neveludens.runtime_options import MEMORY_MODES, memory_mode_flags, memory_mode_label, resolve_memory_mode
 
 import argparse
 parser = argparse.ArgumentParser(description="VLM Inference")
@@ -34,14 +35,22 @@ parser.add_argument("--output-mode", choices=["normal", "debug"], default="norma
 parser.add_argument("--game-mode", choices=["default", "fighting", "split_screen"], default="default", help="Game-specific optional mode")
 parser.add_argument("--agent-slot", choices=["auto", "player2", "player2_coop"], default="auto", help="Agent controller slot preference")
 parser.add_argument("--multimodal-supervisor", choices=["disabled", "enabled"], default="disabled", help="Optional Qwen3.5 4B visual supervisor")
-parser.add_argument("--advanced-memory", action="store_true", help="Enable opt-in visual/place/result/per-game memory")
-recovery_group = parser.add_mutually_exclusive_group()
-recovery_group.add_argument("--smart-recovery", dest="smart_recovery", action="store_true", default=True, help="Enable temporal memory and anti-loop recovery")
-recovery_group.add_argument("--no-smart-recovery", dest="smart_recovery", action="store_false", help="Disable temporal memory and anti-loop recovery")
+parser.add_argument("--memory-mode", choices=MEMORY_MODES, default=None, help="Unified memory and recovery level")
+parser.add_argument("--advanced-memory", action="store_true", help=argparse.SUPPRESS)
+parser.add_argument("--reduced-action-horizon", action="store_true", help="Execute only the first six predicted actions before observing again")
+parser.add_argument("--auto-control-calibration", action="store_true", help="Passively calibrate movement response and weak stick inputs")
+parser.add_argument("--smart-recovery", dest="smart_recovery", action="store_true", default=True, help=argparse.SUPPRESS)
+parser.add_argument("--no-smart-recovery", dest="smart_recovery", action="store_false", help=argparse.SUPPRESS)
 parser.add_argument("--no-special-init", action="store_true", help="Skip game-specific startup button macro")
 parser.add_argument("--stop-file", default="", help="Internal file used by the GUI to request a safe stop")
 
 args = parser.parse_args()
+args.memory_mode = resolve_memory_mode(
+    args.memory_mode,
+    legacy_advanced_memory=args.advanced_memory,
+    legacy_smart_recovery=args.smart_recovery,
+)
+args.smart_recovery, args.advanced_memory = memory_mode_flags(args.memory_mode)
 stop_file = normalize_stop_file(args.stop_file)
 menu_allowed = bool(args.allow_menu and not args.block_menu)
 
@@ -103,8 +112,9 @@ print(f"Saidas: {args.output_mode}")
 print(f"Modo de jogo: {args.game_mode}")
 print(f"Modo de jogador: {args.agent_slot}")
 print(f"Supervisor multimodal: {args.multimodal_supervisor}")
-print(f"Recuperacao inteligente: {'ligada' if args.smart_recovery else 'desligada'}")
-print(f"Memoria avancada: {'ligada' if args.advanced_memory else 'desligada'}")
+print(f"Recuperacao inteligente: {memory_mode_label(args.memory_mode)}")
+print(f"Horizonte reduzido: {'ligado' if args.reduced_action_horizon else 'desligado'}")
+print(f"Calibracao automatica: {'ligada' if args.auto_control_calibration else 'desligada'}")
 
 CKPT_NAME = Path(policy_info["ckpt_path"]).stem
 if not menu_allowed:
@@ -162,11 +172,12 @@ supervisor = ObjectiveSupervisor(
     process_name=args.process,
     allow_menu=menu_allowed,
     enable_recovery=args.smart_recovery,
+    enable_control_calibration=args.auto_control_calibration,
     log_path=PATH_SUPERVISOR,
 )
 print(f"Supervisor profile: {supervisor.profile.name} ({supervisor.profile.genre})")
-if not args.smart_recovery:
-    print("Recuperacao inteligente desativada.")
+if args.memory_mode == "disabled":
+    print("Recuperacao inteligente no modo Padrao.")
 fighting_assist = FightingAssist(
     enabled=args.game_mode == "fighting",
     process_name=args.process,
@@ -181,8 +192,8 @@ advanced_memory = AdvancedGameMemory(
     process_name=args.process,
     enabled=args.advanced_memory,
 )
-if args.advanced_memory:
-    print("Memoria avancada ativada: visual curta, lugares, resultados, memoria por jogo e resumo para VLM.")
+if args.memory_mode == "persistent":
+    print("Memoria persistente ativada: lugares, resultados por jogo e resumo para VLM.")
 multimodal_supervisor = AsyncMultimodalSupervisor(
     enabled=args.multimodal_supervisor == "enabled",
     process_name=args.process,
@@ -614,10 +625,19 @@ with debug_recorder_context as debug_recorder:
                 if split_reasons:
                     print(f"Tela dividida: {'; '.join(split_reasons)}")
 
-                if debug_outputs:
-                    print(f"Executing {len(env_actions)} actions, each action will be repeated {action_downsample_ratio} times")
+                actions_to_execute = env_actions
+                if args.reduced_action_horizon and len(env_actions) > 6:
+                    actions_to_execute = env_actions[:6]
 
-                for i, a in enumerate(env_actions):
+                supervisor.record_executed_actions(actions_to_execute)
+
+                if debug_outputs:
+                    print(
+                        f"Executing {len(actions_to_execute)} of {len(env_actions)} predicted actions, "
+                        f"each action will be repeated {action_downsample_ratio} times"
+                    )
+
+                for i, a in enumerate(actions_to_execute):
                     for _ in range(action_downsample_ratio):
                         check_stop()
                         obs, reward, terminated, truncated, info = env.step(action=a)
@@ -640,7 +660,7 @@ with debug_recorder_context as debug_recorder:
                 # Append env_actions dictionnary to JSONL file
                 if debug_outputs:
                     with open(PATH_ACTIONS, "a") as f:
-                        for i, a in enumerate(env_actions):
+                        for i, a in enumerate(actions_to_execute):
                             # convert numpy arrays to lists for JSON serialization
                             for k, v in a.items():
                                 if isinstance(v, np.ndarray):

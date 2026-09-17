@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from neveludens.control_calibration import AutomaticControlCalibration
 from neveludens.memory import TemporalMemory
 from neveludens.perception import PerceptionAnalyzer, PerceptionState
 from neveludens.profiles import GameProfile, get_profile
@@ -35,6 +36,7 @@ class ObjectiveSupervisor:
         allow_menu: bool,
         enable_recovery: bool = True,
         enable_skills: bool = True,
+        enable_control_calibration: bool = False,
         log_path: Path | None = None,
     ):
         self.enable_recovery = enable_recovery
@@ -42,6 +44,7 @@ class ObjectiveSupervisor:
         self.allow_menu = allow_menu
         self.perception = PerceptionAnalyzer()
         self.memory = TemporalMemory() if enable_recovery else None
+        self.calibration = AutomaticControlCalibration(enabled=enable_control_calibration)
         self.skills = SkillLibrary(enabled=enable_skills and enable_recovery)
         self.log_path = log_path
         self.latest_perception: PerceptionState | None = None
@@ -50,6 +53,7 @@ class ObjectiveSupervisor:
 
     def observe(self, image: Image.Image, step: int) -> PerceptionState:
         state = self.perception.analyze(image, step)
+        self.calibration.observe(state)
         if self.memory is not None:
             self.memory.update_perception(state)
         self.latest_perception = state
@@ -73,6 +77,9 @@ class ObjectiveSupervisor:
                 reasons.append(f"mapped right-stick button tokens on {changed} actions")
 
         apply_deadzone(actions, self.profile)
+        calibrated_actions = self.calibration.apply(actions)
+        if calibrated_actions:
+            reasons.append(f"control calibration strengthened {calibrated_actions} movement axes")
 
         skill_decision = None
         if self.memory is not None:
@@ -82,6 +89,7 @@ class ObjectiveSupervisor:
                 self.memory,
                 self.profile,
                 step,
+                self.calibration,
             )
         skill_name = None
         if skill_decision is not None:
@@ -93,6 +101,9 @@ class ObjectiveSupervisor:
         if self.memory is not None:
             self.memory.update_actions(actions)
             memory_snapshot = self.memory.snapshot()
+        calibration_snapshot = self.calibration.snapshot()
+        if calibration_snapshot:
+            memory_snapshot["control_calibration"] = calibration_snapshot
 
         decision = SupervisorDecision(
             step=step,
@@ -105,6 +116,12 @@ class ObjectiveSupervisor:
         )
         self._log(decision)
         return decision
+
+    def record_executed_actions(self, actions: list[dict]) -> None:
+        """Record only the final action slice that was sent to the controller."""
+        if self.memory is not None:
+            self.memory.record_executed_actions(actions)
+        self.calibration.record_executed_actions(actions)
 
     def _log(self, decision: SupervisorDecision) -> None:
         if self.log_path is None:

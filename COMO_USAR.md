@@ -34,26 +34,30 @@ iniciar.bat
 4. Selecione o processo do jogo na lista ou digite o nome exato do `.exe`.
 5. Deixe a captura em `Automática`, a menos que queira testar manualmente `dxcam` ou `pyautogui`.
 6. Deixe o modo de captura em **Precisão** ou escolha **Tempo real**.
-7. Deixe a saída de depuração em **Simples** ou escolha **Debug** para gravar PNG, vídeos e logs detalhados.
+7. Deixe a saída de depuração desligada para **Simples** ou ative para **Detalhado**, gravando PNG, vídeos e logs detalhados.
 8. Deixe o modo de jogo em **Padrão**, ou escolha **Jogo de luta** para Street Fighter 6.
 9. Deixe **Modo de jogador** em **Automático**, ou escolha **Player 2** quando quiser que a IA tente entrar como segundo jogador.
 10. Deixe **Supervisor multimodal** em **Desativado**, ou escolha **Ativado** para usar Qwen3.5 4B como orientador visual opcional.
-11. Deixe **Recuperação inteligente** ligada para usar memória temporal e anti-loop juntos.
-12. Deixe **Permitir acesso de menus** ativado ou desative se quiser bloquear ações `START`, `BACK` e `GUIDE`.
-13. Clique em **Iniciar**.
-14. Para parar, clique em **Parar** no mesmo botão.
+11. Deixe **Recuperação inteligente** em **Temporário**, escolha **Persistente** para salvar lugares e resultados por jogo ou **Padrão** para remover essas camadas.
+12. Ative **Horizonte reduzido** se quiser reavaliar o cenário após apenas 6 ações de cada bloco previsto.
+13. Ative **Calibração automática** para aprender passivamente a resposta dos movimentos durante a sessão.
+14. Deixe **Permitir acesso de menus** desativado ou ative se quiser liberar ações `START`, `BACK` e `GUIDE`.
+15. Clique em **Iniciar**.
+16. Para parar, clique em **Parar** no mesmo botão.
 
 Padrões atuais:
 
 - Porta do servidor: `5555`.
-- Permitir acesso de menus: ligado por padrão.
+- Permitir acesso de menus: desligado por padrão.
 - Captura: `dxcam` primeiro, `pyautogui` como fallback conservador.
 - Modo de captura padrão: `Precisão`.
 - Saída de depuração padrão: `Simples`.
 - Modo de jogo padrão: `Padrão`.
 - Modo de jogador padrão: `Automático`.
 - Supervisor multimodal padrão: `Desativado`.
-- Recuperação inteligente: ligada.
+- Recuperação inteligente: `Temporário`.
+- Horizonte reduzido: desligado.
+- Calibração automática: desligada.
 - Macro especial automática para `isaac-ng.exe` e `Cuphead.exe`.
 
 No **Jogo de luta**, o NeveLudens incentiva mais movimento lateral, pulos e golpes ritmados, sem tentar substituir a IA base com estratégia própria. Para Street Fighter 6, prefira controles Modernos e use **Modo de jogador: Player 2** se você quiser jogar contra a IA.
@@ -78,10 +82,10 @@ A captura correta deve mostrar exatamente a janela do jogo. Se a imagem estiver 
 
 - `logs\gui_run_*.log`: log espelho do iniciar.
 - `logs\server_*.log`: log do servidor local.
-- `out\<modelo>\*_ACTIONS.json`: ações enviadas ao jogo, salvo apenas no modo `Debug`.
-- `out\<modelo>\*_SUPERVISOR.json`: decisões do supervisor, salvo apenas no modo `Debug`.
-- `out\<modelo>\*_DEBUG.mp4`: vídeo de debug, salvo apenas no modo `Debug`.
-- `out\<modelo>\*_CLEAN.mp4`: vídeo limpo, salvo apenas no modo `Debug`.
+- `out\<modelo>\*_ACTIONS.json`: ações enviadas ao jogo, salvo apenas com a saída detalhada.
+- `out\<modelo>\*_SUPERVISOR.json`: decisões do supervisor, salvo apenas com a saída detalhada.
+- `out\<modelo>\*_DEBUG.mp4`: vídeo de debug, salvo apenas com a saída detalhada.
+- `out\<modelo>\*_CLEAN.mp4`: vídeo limpo, salvo apenas com a saída detalhada.
 
 ## Observações
 
