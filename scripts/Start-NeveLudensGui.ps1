@@ -27,6 +27,8 @@ $LogsDir = Join-Path $Repo "logs"
 $OutDir = Join-Path $Repo "out"
 $DebugDir = Join-Path $Repo "debug"
 $LastCapturePath = Join-Path $OutDir "last_model_capture.png"
+$FlyBrainTelemetryPath = Join-Path $OutDir "flybrain_telemetry.json"
+$FlyBrainLayoutPath = Join-Path $OutDir "flybrain_layout.json"
 $InstallBat = Join-Path $Repo "instalar.bat"
 $XamlPath = Join-Path $PSScriptRoot "ui\NeveLudens.xaml"
 $IconPath = Join-Path $Repo "static\favicon.png"
@@ -47,6 +49,12 @@ $script:LoadingSettings = $true
 $script:ApplyingPreset = $false
 $script:CustomPreset = $null
 $script:LastCaptureWriteTicks = 0
+$script:FlyBrainLayoutWriteTicks = 0
+$script:FlyBrainTelemetryWriteTicks = 0
+$script:FlyBrainActiveDots = New-Object System.Collections.ArrayList
+$script:FlyBrainCanvasWidth = 0.0
+$script:FlyBrainCanvasHeight = 0.0
+$script:FlyBrainAspectRatio = 1.527
 
 New-Item -ItemType Directory -Force -Path $LogsDir, $OutDir, $DebugDir | Out-Null
 Set-Location $Repo
@@ -61,6 +69,7 @@ function Set-LocalEnvironment {
     $env:TRANSFORMERS_CACHE = Join-Path $Repo ".cache\huggingface\transformers"
     $env:TORCH_HOME = Join-Path $Repo ".cache\torch"
     $env:PIP_CACHE_DIR = Join-Path $Repo ".cache\pip"
+    $env:FLY_DATA = Join-Path $Repo ".cache\malecns"
     $env:PATH = (Join-Path $Repo ".venv\Scripts") + ";" + $env:PATH
 }
 
@@ -169,9 +178,10 @@ $controlNames = @(
     "SessionGameText", "StartButton", "StartButtonPowerIcon", "StartButtonLabel",
     "NotificationBar", "NotificationTitle", "NotificationDetail", "NotificationDetailsButton",
     "ProcessCombo", "ManualProcessBox", "RefreshButton",
-    "LastCaptureImage", "LastCapturePlaceholder", "PresetCombo", "PresetDescriptionText",
+    "LastCaptureImage", "LastCapturePlaceholder", "FlyBrainPanel", "FlyBrainCanvas", "FlyBrainStatusText", "FlyBrainWaitingText", "PresetCombo", "PresetDescriptionText",
     "ModelCombo", "BackendCombo", "RuntimeModeCombo", "DetailedOutputCheck", "GameModeCombo", "AgentSlotCombo",
-    "MultimodalSupervisorCheck", "MemoryRecoveryCombo", "ReducedActionHorizonCheck", "AutoControlCalibrationCheck", "MenuActionsCheck",
+    "MultimodalSupervisorCheck", "MemoryRecoveryCombo", "ReducedActionHorizonDivider", "ReducedActionHorizonCheck", "AutoControlCalibrationCheck", "MenuActionsDivider", "MenuActionsCheck",
+    "RuntimeModeDivider", "RuntimeModeSetting", "GameModeSetting", "AgentSlotDivider", "AdvancedSettingsSection",
     "DiagnoseButton", "LogBox", "CopyLogButton", "ClearLogButton"
 )
 
@@ -238,11 +248,10 @@ function Get-SelectedProcessName {
 
 function Get-ModelPath {
     $choice = Get-ComboTag $ModelCombo "default"
-    switch ($choice) {
-        "pizza_tower" { return Join-Path $Repo "models\pizza_tower\final_model.pt" }
-        "pizza_tower_fast" { return Join-Path $Repo "models\pizza_tower\final_model_35.pt" }
-        default { return Join-Path $Repo "models\ng.pt" }
+    if ($choice -eq "malecns") {
+        return Join-Path $Repo ".cache\malecns\brain.npz"
     }
+    return Join-Path $Repo "models\ng.pt"
 }
 
 function Get-PresetSettings {
@@ -266,7 +275,7 @@ function Get-PresetSettings {
         }
         "quality" {
             return [PSCustomObject][ordered]@{
-                model_choice = "pizza_tower_fast"
+                model_choice = "default"
                 screenshot_backend = "dxcam"
                 runtime_mode = "precision"
                 output_mode = "debug"
@@ -391,7 +400,7 @@ function Test-UiSettingsMatch {
 function Update-PresetDescription {
     $description = switch (Get-ComboTag $PresetCombo "default") {
         "performance" { "Prioriza resposta rápida e baixo custo de processamento." }
-        "quality" { "Ativa captura precisa, modelo acelerado e recursos avançados." }
+        "quality" { "Ativa captura precisa, depuração detalhada e recursos avançados." }
         default { "" }
     }
     $PresetDescriptionText.Text = $description
@@ -464,7 +473,162 @@ function Set-CustomPresetFromUi {
     Save-UiConfig
 }
 
+function Test-FlyBrainSelected {
+    return (Get-ComboTag $ModelCombo "default") -eq "malecns"
+}
+
+function Update-ModelSpecificOptions {
+    $usingFlyBrain = Test-FlyBrainSelected
+    $nitrogenVisibility = if ($usingFlyBrain) {
+        [System.Windows.Visibility]::Collapsed
+    } else {
+        [System.Windows.Visibility]::Visible
+    }
+    $RuntimeModeDivider.Visibility = $nitrogenVisibility
+    $RuntimeModeSetting.Visibility = $nitrogenVisibility
+    $GameModeSetting.Visibility = $nitrogenVisibility
+    $AgentSlotDivider.Visibility = $nitrogenVisibility
+    $AdvancedSettingsSection.Visibility = $nitrogenVisibility
+    $ReducedActionHorizonDivider.Visibility = $nitrogenVisibility
+    $ReducedActionHorizonCheck.Visibility = $nitrogenVisibility
+    $MenuActionsDivider.Visibility = $nitrogenVisibility
+    $MenuActionsCheck.Visibility = $nitrogenVisibility
+}
+
+function New-FlyBrainDot {
+    param(
+        [double]$X,
+        [double]$Y,
+        [double]$Size,
+        [string]$Color,
+        [double]$Opacity = 1.0
+    )
+    $dot = New-Object System.Windows.Shapes.Ellipse
+    $dot.Width = $Size
+    $dot.Height = $Size
+    $dot.Fill = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.ColorConverter]::ConvertFromString($Color))
+    $dot.Opacity = $Opacity
+    [System.Windows.Controls.Canvas]::SetLeft($dot, $X - ($Size / 2.0))
+    [System.Windows.Controls.Canvas]::SetTop($dot, $Y - ($Size / 2.0))
+    return $dot
+}
+
+function Get-FlyBrainCanvasPoint {
+    param(
+        [double]$NormalizedX,
+        [double]$NormalizedY,
+        [double]$Width,
+        [double]$Height
+    )
+    $padding = 5.0
+    $availableWidth = [Math]::Max(1.0, $Width - ($padding * 2.0))
+    $availableHeight = [Math]::Max(1.0, $Height - ($padding * 2.0))
+    $availableAspect = $availableWidth / $availableHeight
+    if ($availableAspect -gt $script:FlyBrainAspectRatio) {
+        $plotHeight = $availableHeight
+        $plotWidth = $plotHeight * $script:FlyBrainAspectRatio
+    } else {
+        $plotWidth = $availableWidth
+        $plotHeight = $plotWidth / $script:FlyBrainAspectRatio
+    }
+    $offsetX = ($Width - $plotWidth) / 2.0
+    $offsetY = ($Height - $plotHeight) / 2.0
+    return [System.Windows.Point]::new(
+        $offsetX + ($NormalizedX * $plotWidth),
+        $offsetY + ($NormalizedY * $plotHeight)
+    )
+}
+
+function Initialize-FlyBrainLayout {
+    if (-not (Test-Path -LiteralPath $FlyBrainLayoutPath)) {
+        return $false
+    }
+    $layoutFile = Get-Item -LiteralPath $FlyBrainLayoutPath
+    $width = [Math]::Max(280.0, $FlyBrainCanvas.ActualWidth)
+    $height = [Math]::Max(120.0, $FlyBrainCanvas.ActualHeight)
+    $sameSize = [Math]::Abs($width - $script:FlyBrainCanvasWidth) -lt 8.0 -and [Math]::Abs($height - $script:FlyBrainCanvasHeight) -lt 8.0
+    if ($layoutFile.LastWriteTimeUtc.Ticks -eq $script:FlyBrainLayoutWriteTicks -and $FlyBrainCanvas.Children.Count -gt 0 -and $sameSize) {
+        return $true
+    }
+    $layout = Get-Content -LiteralPath $FlyBrainLayoutPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($null -ne $layout.aspect_ratio -and [double]$layout.aspect_ratio -gt 0.1) {
+        $script:FlyBrainAspectRatio = [double]$layout.aspect_ratio
+    }
+    $FlyBrainCanvas.Children.Clear()
+    $script:FlyBrainActiveDots.Clear()
+    foreach ($point in $layout.points) {
+        $canvasPoint = Get-FlyBrainCanvasPoint -NormalizedX ([double]$point[0]) -NormalizedY ([double]$point[1]) -Width $width -Height $height
+        $dot = New-FlyBrainDot -X $canvasPoint.X -Y $canvasPoint.Y -Size 1.25 -Color "#D8D8D8" -Opacity 0.42
+        [void]$FlyBrainCanvas.Children.Add($dot)
+    }
+    $script:FlyBrainLayoutWriteTicks = $layoutFile.LastWriteTimeUtc.Ticks
+    $script:FlyBrainCanvasWidth = $width
+    $script:FlyBrainCanvasHeight = $height
+    return $true
+}
+
+function Update-FlyBrainVisualization {
+    if (-not (Test-FlyBrainSelected)) {
+        return
+    }
+    $FlyBrainPanel.Visibility = [System.Windows.Visibility]::Visible
+    $LastCaptureImage.Visibility = [System.Windows.Visibility]::Collapsed
+    $LastCapturePlaceholder.Visibility = [System.Windows.Visibility]::Collapsed
+
+    if (-not (Initialize-FlyBrainLayout)) {
+        $FlyBrainWaitingText.Visibility = [System.Windows.Visibility]::Visible
+        $FlyBrainStatusText.Visibility = [System.Windows.Visibility]::Collapsed
+        return
+    }
+    if (-not (Test-Path -LiteralPath $FlyBrainTelemetryPath)) {
+        $FlyBrainWaitingText.Visibility = [System.Windows.Visibility]::Visible
+        $FlyBrainStatusText.Visibility = [System.Windows.Visibility]::Collapsed
+        return
+    }
+    $telemetryFile = Get-Item -LiteralPath $FlyBrainTelemetryPath
+    if ($telemetryFile.LastWriteTimeUtc.Ticks -eq $script:FlyBrainTelemetryWriteTicks) {
+        return
+    }
+    $telemetry = Get-Content -LiteralPath $FlyBrainTelemetryPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($dot in @($script:FlyBrainActiveDots)) {
+        [void]$FlyBrainCanvas.Children.Remove($dot)
+    }
+    $script:FlyBrainActiveDots.Clear()
+    $width = [Math]::Max(280.0, $FlyBrainCanvas.ActualWidth)
+    $height = [Math]::Max(120.0, $FlyBrainCanvas.ActualHeight)
+    foreach ($point in $telemetry.active) {
+        $intensity = if ($point.Count -ge 3) { [Math]::Max(0.0, [Math]::Min(1.0, [double]$point[2])) } else { 1.0 }
+        $canvasPoint = Get-FlyBrainCanvasPoint -NormalizedX ([double]$point[0]) -NormalizedY ([double]$point[1]) -Width $width -Height $height
+        $dot = New-FlyBrainDot -X $canvasPoint.X -Y $canvasPoint.Y -Size (2.5 + ($intensity * 1.5)) -Color "#FFFFFF" -Opacity (0.72 + ($intensity * 0.26))
+        [void]$FlyBrainCanvas.Children.Add($dot)
+        [void]$script:FlyBrainActiveDots.Add($dot)
+    }
+    $FlyBrainWaitingText.Visibility = [System.Windows.Visibility]::Collapsed
+    $FlyBrainStatusText.Visibility = [System.Windows.Visibility]::Visible
+    $FlyBrainStatusText.Text = "{0:N0} neurônios ativos · {1:N1} ms" -f [int]$telemetry.active_count, [double]$telemetry.latency_ms
+    $script:FlyBrainTelemetryWriteTicks = $telemetryFile.LastWriteTimeUtc.Ticks
+}
+
+function Update-ModelVisualization {
+    Update-ModelSpecificOptions
+    if (Test-FlyBrainSelected) {
+        $FlyBrainPanel.Visibility = [System.Windows.Visibility]::Visible
+        Update-FlyBrainVisualization
+    } else {
+        $FlyBrainPanel.Visibility = [System.Windows.Visibility]::Collapsed
+        Update-LastCapturePreview
+    }
+}
+
 function Update-LastCapturePreview {
+    if (Test-FlyBrainSelected) {
+        $FlyBrainPanel.Visibility = [System.Windows.Visibility]::Visible
+        $LastCaptureImage.Visibility = [System.Windows.Visibility]::Collapsed
+        $LastCapturePlaceholder.Visibility = [System.Windows.Visibility]::Collapsed
+        Update-FlyBrainVisualization
+        return
+    }
+    $FlyBrainPanel.Visibility = [System.Windows.Visibility]::Collapsed
     if ((Get-OutputMode) -ne "debug") {
         $script:LastCaptureWriteTicks = 0
         $LastCaptureImage.Source = $null
@@ -514,7 +678,7 @@ function Sync-CapturePreviewUpdates {
     $agentRunning = $script:ActiveKind -eq "agent" -and $script:ActiveProcess -and -not $script:ActiveProcess.HasExited
 
     Update-LastCapturePreview
-    if ($detailedOutput -and $agentRunning) {
+    if (($detailedOutput -or (Test-FlyBrainSelected)) -and $agentRunning) {
         $script:CaptureTimer.Start()
     } else {
         $script:CaptureTimer.Stop()
@@ -652,21 +816,18 @@ function Show-Notification {
     $NotificationDetail.Text = $Detail
     $NotificationDetailsButton.Visibility = if ($ShowDetails) { [System.Windows.Visibility]::Visible } else { [System.Windows.Visibility]::Collapsed }
     $NotificationBar.Background = Get-Brush "SurfaceRaisedBrush"
+    $NotificationBar.BorderThickness = New-Object System.Windows.Thickness 0
     switch ($Kind) {
         "success" {
-            $NotificationBar.BorderBrush = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(47, 92, 70))
             $NotificationTitle.Foreground = Get-Brush "SuccessBrush"
         }
         "warning" {
-            $NotificationBar.BorderBrush = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(95, 76, 38))
             $NotificationTitle.Foreground = Get-Brush "WarningBrush"
         }
         "danger" {
-            $NotificationBar.BorderBrush = New-Object System.Windows.Media.SolidColorBrush ([System.Windows.Media.Color]::FromRgb(97, 51, 56))
             $NotificationTitle.Foreground = Get-Brush "DangerBrush"
         }
         default {
-            $NotificationBar.BorderBrush = Get-Brush "BorderStrongBrush"
             $NotificationTitle.Foreground = Get-Brush "TextPrimaryBrush"
         }
     }
@@ -953,6 +1114,7 @@ function Start-LoggedPython {
         "set PYTHONUNBUFFERED=1",
         "set `"PYTHONPATH=$Repo;%PYTHONPATH%`"",
         "set BNB_CUDA_VERSION=130",
+        "set `"FLY_DATA=$Repo\.cache\malecns`"",
         "`"$VenvPython`" $argText >> `"$script:RunLogPath`" 2>&1"
     )
     Set-Content -LiteralPath $runCmdPath -Value $cmdLines -Encoding ASCII
@@ -966,6 +1128,7 @@ function Start-LoggedPython {
     $psi.EnvironmentVariables["PYTHONUTF8"] = "1"
     $psi.EnvironmentVariables["PYTHONUNBUFFERED"] = "1"
     $psi.EnvironmentVariables["BNB_CUDA_VERSION"] = "130"
+    $psi.EnvironmentVariables["FLY_DATA"] = Join-Path $Repo ".cache\malecns"
 
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
@@ -1001,24 +1164,28 @@ function Start-AgentFromUi {
 
     Save-UiConfig
     Hide-Notification
-    $multimodalMode = if ([bool]$MultimodalSupervisorCheck.IsChecked) { "enabled" } else { "disabled" }
+    $usingFlyBrain = Test-FlyBrainSelected
+    $multimodalMode = if (-not $usingFlyBrain -and [bool]$MultimodalSupervisorCheck.IsChecked) { "enabled" } else { "disabled" }
+    $runtimeMode = if ($usingFlyBrain) { "realtime" } else { Get-ComboTag $RuntimeModeCombo "precision" }
+    $gameMode = if ($usingFlyBrain) { "default" } else { Get-ComboTag $GameModeCombo "default" }
+    $memoryMode = if ($usingFlyBrain) { "disabled" } else { Get-ComboTag $MemoryRecoveryCombo "temporary" }
     $launchArgs = @(
         "scripts\launcher.py",
         "--process", $processName,
         "--screenshot-backend", (Get-ComboTag $BackendCombo "auto"),
-        "--runtime-mode", (Get-ComboTag $RuntimeModeCombo "precision"),
+        "--runtime-mode", $runtimeMode,
         "--output-mode", (Get-OutputMode),
-        "--game-mode", (Get-ComboTag $GameModeCombo "default"),
+        "--game-mode", $gameMode,
         "--model-choice", (Get-ComboTag $ModelCombo "default"),
         "--agent-slot", (Get-ComboTag $AgentSlotCombo "auto"),
         "--multimodal-supervisor", $multimodalMode,
         "--port", "5555",
         "--non-interactive"
     )
-    $launchArgs += @("--memory-mode", (Get-ComboTag $MemoryRecoveryCombo "temporary"))
-    if ([bool]$ReducedActionHorizonCheck.IsChecked) { $launchArgs += "--reduced-action-horizon" }
-    if ([bool]$AutoControlCalibrationCheck.IsChecked) { $launchArgs += "--auto-control-calibration" }
-    $launchArgs += if ([bool]$MenuActionsCheck.IsChecked) { "--allow-menu" } else { "--block-menu" }
+    $launchArgs += @("--memory-mode", $memoryMode)
+    if (-not $usingFlyBrain -and [bool]$ReducedActionHorizonCheck.IsChecked) { $launchArgs += "--reduced-action-horizon" }
+    if (-not $usingFlyBrain -and [bool]$AutoControlCalibrationCheck.IsChecked) { $launchArgs += "--auto-control-calibration" }
+    $launchArgs += if (-not $usingFlyBrain -and [bool]$MenuActionsCheck.IsChecked) { "--allow-menu" } else { "--block-menu" }
     Start-LoggedPython -Arguments $launchArgs -StartedMessage ("Iniciando NeveLudens para {0}..." -f $processName) -Kind "agent"
 }
 
@@ -1100,11 +1267,16 @@ $script:LogTimer.Add_Tick({
 
 $script:CaptureTimer.Add_Tick({
     try {
-        if ((Get-OutputMode) -ne "debug" -or
+        if ((Get-OutputMode) -ne "debug" -and -not (Test-FlyBrainSelected) -or
             $script:ActiveKind -ne "agent" -or
             -not $script:ActiveProcess -or
             $script:ActiveProcess.HasExited) {
             $script:CaptureTimer.Stop()
+            return
+        }
+
+        if (Test-FlyBrainSelected) {
+            Update-FlyBrainVisualization
             return
         }
 
@@ -1176,6 +1348,10 @@ foreach ($combo in $configurationCombos) {
         Set-CustomPresetFromUi
     })
 }
+$ModelCombo.Add_SelectionChanged({
+    Update-ModelVisualization
+    Sync-CapturePreviewUpdates
+})
 $DetailedOutputCheck.Add_Checked({
     Sync-CapturePreviewUpdates
 })
@@ -1255,6 +1431,7 @@ $window.Add_ContentRendered({
     if (-not $script:InitialPageRendered) {
         $script:InitialPageRendered = $true
         Show-Page -Page "overview"
+        Update-ModelVisualization
     }
 })
 

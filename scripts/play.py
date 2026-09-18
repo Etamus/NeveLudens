@@ -173,11 +173,16 @@ supervisor = ObjectiveSupervisor(
     allow_menu=menu_allowed,
     enable_recovery=args.smart_recovery,
     enable_control_calibration=args.auto_control_calibration,
+    legacy_anti_loop=args.memory_mode == "temporary",
     log_path=PATH_SUPERVISOR,
 )
 print(f"Supervisor profile: {supervisor.profile.name} ({supervisor.profile.genre})")
 if args.memory_mode == "disabled":
     print("Recuperacao inteligente no modo Padrao.")
+elif args.memory_mode == "temporary":
+    print("Anti-loop temporario: comportamento legado original ativado.")
+else:
+    print("Recuperacao persistente: memoria e rotinas avancadas ativadas.")
 fighting_assist = FightingAssist(
     enabled=args.game_mode == "fighting",
     process_name=args.process,

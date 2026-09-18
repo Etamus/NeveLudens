@@ -237,6 +237,21 @@
             </Setter>
         </Style>
 
+        <Style x:Key="ToastTextButton" TargetType="Button" BasedOn="{StaticResource TextButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="WindowButton" TargetType="Button">
             <Setter Property="Width" Value="46"/>
             <Setter Property="Height" Value="44"/>
@@ -641,7 +656,6 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="70"/>
-                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
@@ -674,7 +688,20 @@
                         </Grid>
                     </Border>
 
-                    <Border x:Name="NotificationBar" Grid.Row="1" Margin="28,14,28,0" Padding="14,11" CornerRadius="6" BorderThickness="1" Visibility="Collapsed">
+                    <Border x:Name="NotificationBar"
+                            Grid.Row="1"
+                            Panel.ZIndex="100"
+                            Width="410"
+                            Margin="0,16,24,0"
+                            Padding="16,13"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Top"
+                            CornerRadius="9"
+                            BorderThickness="0"
+                            Visibility="Collapsed">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#000000" BlurRadius="18" ShadowDepth="5" Opacity="0.55"/>
+                        </Border.Effect>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -684,11 +711,11 @@
                                 <TextBlock x:Name="NotificationTitle" FontSize="13" FontWeight="SemiBold"/>
                                 <TextBlock x:Name="NotificationDetail" Margin="0,3,0,0" FontSize="12" TextWrapping="Wrap"/>
                             </StackPanel>
-                            <Button x:Name="NotificationDetailsButton" Grid.Column="1" Margin="16,0,0,0" Style="{StaticResource TextButton}" Content="Ver detalhes"/>
+                            <Button x:Name="NotificationDetailsButton" Grid.Column="1" Margin="16,0,0,0" Style="{StaticResource ToastTextButton}" Content="Ver detalhes"/>
                         </Grid>
                     </Border>
 
-                    <Grid Grid.Row="2">
+                    <Grid Grid.Row="1">
                         <Grid x:Name="OverviewPage">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -781,6 +808,24 @@
                                                                Foreground="{DynamicResource TextMutedBrush}"
                                                                FontSize="12"
                                                                Text="Disponível na saída de depuração."/>
+                                                    <Grid x:Name="FlyBrainPanel" Visibility="Collapsed" Background="#050505">
+                                                        <Canvas x:Name="FlyBrainCanvas" Margin="8" ClipToBounds="True" IsHitTestVisible="False"/>
+                                                        <TextBlock x:Name="FlyBrainStatusText"
+                                                                   Panel.ZIndex="2"
+                                                                   Margin="12,9,12,0"
+                                                                   HorizontalAlignment="Left"
+                                                                   VerticalAlignment="Top"
+                                                                   Foreground="#D0D0D0"
+                                                                   FontSize="11"
+                                                                   Visibility="Collapsed"/>
+                                                        <TextBlock x:Name="FlyBrainWaitingText"
+                                                                   Panel.ZIndex="2"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="#D0D0D0"
+                                                                   FontSize="11"
+                                                                   Text="Aguardando atividade..."/>
+                                                    </Grid>
                                                 </Grid>
                                             </Border>
                                         </Grid>
@@ -809,8 +854,7 @@
                                                 </StackPanel>
                                                 <ComboBox x:Name="ModelCombo" Grid.Column="1">
                                                     <ComboBoxItem Content="Padrão" Tag="default" IsSelected="True"/>
-                                                    <ComboBoxItem Content="Dinâmico" Tag="pizza_tower"/>
-                                                    <ComboBoxItem Content="Acelerado" Tag="pizza_tower_fast"/>
+                                                    <ComboBoxItem Content="MaleCNS v1.0 (Experimental)" Tag="malecns"/>
                                                 </ComboBox>
                                             </Grid>
                                             <Border Style="{StaticResource SettingDivider}"/>
@@ -826,8 +870,8 @@
                                                     <ComboBoxItem Content="PyAutoGUI" Tag="pyautogui"/>
                                                 </ComboBox>
                                             </Grid>
-                                            <Border Style="{StaticResource SettingDivider}"/>
-                                            <Grid>
+                                            <Border x:Name="RuntimeModeDivider" Style="{StaticResource SettingDivider}"/>
+                                            <Grid x:Name="RuntimeModeSetting">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="250"/></Grid.ColumnDefinitions>
                                                 <StackPanel VerticalAlignment="Center">
                                                     <TextBlock FontSize="13" FontWeight="SemiBold" Text="Modo de captura"/>
@@ -853,7 +897,7 @@
                                     <Border Margin="0,16,0,0" Style="{StaticResource Section}">
                                         <StackPanel>
                                             <TextBlock Style="{StaticResource SectionTitle}" FontWeight="Bold" Margin="0,0,0,26" Text="Comportamento"/>
-                                            <Grid>
+                                            <Grid x:Name="GameModeSetting">
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="250"/></Grid.ColumnDefinitions>
                                                 <StackPanel VerticalAlignment="Center">
                                                     <TextBlock FontSize="13" FontWeight="SemiBold" Text="Modo de jogo"/>
@@ -865,7 +909,7 @@
                                                     <ComboBoxItem Content="Tela dividida" Tag="split_screen"/>
                                                 </ComboBox>
                                             </Grid>
-                                            <Border Style="{StaticResource SettingDivider}"/>
+                                            <Border x:Name="AgentSlotDivider" Style="{StaticResource SettingDivider}"/>
                                             <Grid>
                                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="250"/></Grid.ColumnDefinitions>
                                                 <StackPanel VerticalAlignment="Center">
@@ -881,7 +925,7 @@
                                         </StackPanel>
                                     </Border>
 
-                                    <Border Margin="0,16,0,0" Style="{StaticResource Section}">
+                                    <Border x:Name="AdvancedSettingsSection" Margin="0,16,0,0" Style="{StaticResource Section}">
                                         <StackPanel>
                                             <TextBlock Style="{StaticResource SectionTitle}" FontWeight="Bold" Margin="0,0,0,26" Text="Recursos avançados"/>
                                             <Grid>
@@ -891,7 +935,7 @@
                                                     <TextBlock Margin="0,3,20,0" Style="{StaticResource CaptionText}" Text="Define a persistência da memória e corrige as ações do modelo." TextWrapping="Wrap"/>
                                                 </StackPanel>
                                                 <ComboBox x:Name="MemoryRecoveryCombo" Grid.Column="1">
-                                                    <ComboBoxItem Content="Padrão" Tag="disabled"/>
+                                                    <ComboBoxItem Content="Desativado" Tag="disabled"/>
                                                     <ComboBoxItem Content="Temporário" Tag="temporary" IsSelected="True"/>
                                                     <ComboBoxItem Content="Persistente" Tag="persistent"/>
                                                 </ComboBox>
@@ -903,7 +947,7 @@
                                                     <TextBlock Margin="0,3,24,0" Style="{StaticResource CaptionText}" Text="Usa um segundo modelo para orientar nas ações."/>
                                                 </StackPanel>
                                             </CheckBox>
-                                            <Border Style="{StaticResource SettingDivider}"/>
+                                            <Border x:Name="ReducedActionHorizonDivider" Style="{StaticResource SettingDivider}"/>
                                             <CheckBox x:Name="ReducedActionHorizonCheck" Style="{StaticResource ToggleSwitch}" IsChecked="False">
                                                 <StackPanel>
                                                     <TextBlock FontSize="13" FontWeight="SemiBold" Text="Horizonte reduzido"/>
@@ -917,7 +961,7 @@
                                                     <TextBlock Margin="0,3,24,0" Style="{StaticResource CaptionText}" Text="Aprende passivamente a resposta do movimento e ajusta comandos fracos."/>
                                                 </StackPanel>
                                             </CheckBox>
-                                            <Border Style="{StaticResource SettingDivider}"/>
+                                            <Border x:Name="MenuActionsDivider" Style="{StaticResource SettingDivider}"/>
                                             <CheckBox x:Name="MenuActionsCheck" Style="{StaticResource ToggleSwitch}" IsChecked="False">
                                                 <StackPanel>
                                                     <TextBlock FontSize="13" FontWeight="SemiBold" Text="Permitir acesso aos menus"/>

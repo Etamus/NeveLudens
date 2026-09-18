@@ -7,6 +7,7 @@ NeveLudens é um agente visual local para jogos que opera diretamente sobre a in
 ---
 
 <img width="966" height="626" alt="{5B2DF142-D76F-43EC-85D7-B5425D095F47}" src="https://github.com/user-attachments/assets/3e14aa6a-5cc2-48f5-94bd-3cb52af50e17" />
+<img width="976" height="634" alt="image" src="https://github.com/user-attachments/assets/16d3c614-fef3-4c74-aba9-83b3861a6daf" />
 <img width="966" height="624" alt="{706FA098-61AC-44CD-BFEC-E37877F25FAC}" src="https://github.com/user-attachments/assets/3e05f318-af24-4b21-b4cb-540dfcdb208d" />
 
 ---
@@ -91,9 +92,10 @@ Modo de jogo:
 Modelo:
 
 - `Padrão`: usa `models/ng.pt`, o mesmo checkpoint atual do NeveLudens.
-- `Dinâmico`: usa `final_model.pt`, salvo em `models/pizza_tower/final_model.pt`.
-- `Acelerado`: usa `final_model_35.pt`, salvo em `models/pizza_tower/final_model_35.pt`.
-- Os modelos alternativos são baixados automaticamente no primeiro uso. O modelo `Padrão` não é sobrescrito.
+- `MaleCNS v1.0 (Experimental)`: usa uma simulação local do connectoma completo da mosca, com 166.700 neurônios e 25.582.938 conexões. Esse motor é separado do NitroGen, recebe a imagem real do jogo e converte a atividade de neurônios descendentes em comandos de controle.
+- O MaleCNS não é um checkpoint treinado e não conhece jogos previamente. Um codificador visual estimula retina, movimento, aproximação, ameaça e perseguição; um decodificador motor interpreta circuitos associados a direção, avanço, recuo, fuga e ações.
+- Ao selecionar MaleCNS, o NitroGen não é carregado. Ao selecionar Padrão, o MaleCNS não é importado nem executado.
+- A aba Início mostra uma projeção 2D em tempo real dos disparos do MaleCNS enquanto esse motor estiver ativo.
 
 Modo de jogador:
 
@@ -112,8 +114,8 @@ Supervisor multimodal:
 Recuperação inteligente:
 
 - `Padrão`: não mantém memória temporal, não executa anti-loop e não cria memória persistente.
-- `Temporário`: mantém memória durante a sessão, compara movimento enviado com o resultado visual e aplica recuperação conservadora quando necessário.
-- `Persistente`: inclui tudo do nível Temporário e acrescenta lugares, resultados por jogo, arquivo em `memories/` e resumo para a VLM.
+- `Temporário`: reproduz exatamente o anti-loop anterior à reformulação. Observa baixa movimentação visual e repetição de ações durante a sessão e usa a sequência fixa de escapes original.
+- `Persistente`: usa a recuperação reformulada baseada no resultado visual e acrescenta memória de lugares, resultados por jogo, arquivo em `memories/` e resumo para a VLM. Ele não acumula o anti-loop legado do modo Temporário.
 - Ficar parado, atacar ou esperar não é suficiente para acionar recuperação; são exigidas várias tentativas reais de movimento sem resultado.
 - A recuperação altera somente o movimento necessário, preservando câmera e botões previstos pelo modelo.
 
@@ -142,10 +144,10 @@ Roda um instalador CMD normal. Ele prepara o projeto para uso local:
 - Mantém caches em `.cache`.
 - Ajusta PyTorch CUDA na `.venv`.
 - Baixa `models/ng.pt` quando necessário.
-- Modelos alternativos de `iniciar.bat` são baixados separadamente no primeiro uso.
-- Valida importações, CUDA e controle virtual.
+- Baixa a cópia processada e verificada do MaleCNS para `.cache\malecns` quando necessário.
+- Valida importações, CUDA para o NitroGen, MaleCNS e controle virtual.
 
-Nada é instalado globalmente pelo `pip`.
+Nada é instalado globalmente pelo `pip`. O MaleCNS usa Numba/CPU por padrão e não exige Docker, WSL, Node, Conda ou compilador C++.
 
 ## Benchmark
 
@@ -188,9 +190,9 @@ Esses números ajudam a definir expectativas. O modelo generalista não tem o me
 
 ### Recuperação inteligente
 
-No nível `Temporário`, `neveludens/memory.py` guarda histórico curto de frames, ações e eventos. A recuperação compara o movimento realmente enviado com o frame seguinte, evitando reagir apenas porque a tela ficou parada.
+No nível `Temporário`, `neveludens/legacy_anti_loop.py` preserva o comportamento original: guarda somente o estado curto necessário, detecta baixa movimentação e assinaturas repetidas e executa as mesmas direções fixas de escape usadas antes da reformulação.
 
-No nível `Persistente`, `neveludens/advanced_memory.py` também reconhece imagens parecidas por hash visual, agrupa lugares visitados, registra quais padrões de ação deram progresso ou não e salva um arquivo por jogo em `memories/`.
+No nível `Persistente`, a recuperação atual compara o movimento enviado com a resposta visual. `neveludens/advanced_memory.py` também reconhece imagens parecidas por hash visual, agrupa lugares visitados, registra quais padrões de ação deram progresso ou não e salva um arquivo por jogo em `memories/`.
 
 Quando ligada junto do Supervisor multimodal, ela envia um resumo curto para a VLM com sinais como "mesmo lugar há muitos passos", "última ação não mudou a cena" e "área vista recentemente". Isso ajuda a VLM orientar uma rota diferente sem receber uma lista enorme de prints antigos.
 
@@ -245,11 +247,11 @@ O servidor local é iniciado na porta `5555` por padrão. Se essa porta estiver 
 
 - Windows.
 - Python 3.10 ou superior.
-- GPU NVIDIA com CUDA funcional no PyTorch.
+- GPU NVIDIA com CUDA funcional no PyTorch para o motor NitroGen. O MaleCNS pode executar em CPU.
 - Jogo aberto em janela visível.
 - Suporte a controle virtual no Windows.
 
-Observação importante: o pacote Python `vgamepad` é instalado na `.venv`, mas o driver de controle virtual precisa estar disponível no Windows. O instalador valida isso e avisa se o controle virtual não puder ser criado.
+Observação importante: o pacote Python `vgamepad` é instalado na `.venv`, mas o controle virtual também exige o driver ViGEmBus no Windows. O `instalar.bat` detecta sua ausência, pede autorização e instala ou repara o driver usando o MSI que já acompanha o pacote local. Essa é a única dependência que precisa ser registrada no Windows, pois um driver não pode operar somente dentro da pasta do projeto.
 
 ## Uso
 
@@ -300,6 +302,10 @@ Normalmente você não precisa deles, mas continuam disponíveis:
 ```
 
 ```bat
+.venv\Scripts\python.exe scripts\flybrain_serve.py --port 5555 --data .cache\malecns
+```
+
+```bat
 .venv\Scripts\python.exe scripts\play.py --process nome_do_jogo.exe --port 5555 --screenshot-backend auto --agent-slot auto
 ```
 
@@ -310,3 +316,5 @@ Para uso comum, prefira `instalar.bat` e `iniciar.bat`.
 Copyright (c) 2026 Mateus Lopes. Todos os direitos reservados.
 
 Qualquer cópia, redistribuição ou modificação deve preservar a atribuição ao autor original conforme LICENSE.txt.
+
+O backend experimental usa o pacote `flybrain` sob licença MIT e dados MaleCNS v1.0 sob CC BY 4.0. O connectoma é resultado da colaboração FlyEM/HHMI Janelia, University of Cambridge, MRC Laboratory of Molecular Biology e Google Research. Consulte `THIRD_PARTY_NOTICES.md`.

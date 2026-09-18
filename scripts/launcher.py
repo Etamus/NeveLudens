@@ -23,6 +23,8 @@ from neveludens.runtime_options import MEMORY_MODES, memory_mode_label, resolve_
 VENV_PYTHON = REPO / ".venv" / "Scripts" / "python.exe"
 HF_EXE = REPO / ".venv" / "Scripts" / "hf.exe"
 CHECKPOINT = REPO / "models" / "ng.pt"
+FLY_DATA = REPO / ".cache" / "malecns"
+FLY_TELEMETRY = REPO / "out" / "flybrain_telemetry.json"
 CONFIG_PATH = REPO / "neveludens_local_config.json"
 LOG_DIR = REPO / "logs"
 DEFAULT_PORT = 5555
@@ -30,24 +32,18 @@ MODEL_REPO = "nvidia/" + "Nitro" + "Gen"
 MODEL_CHOICES = {
     "default": {
         "label": "Padrão",
+        "engine": "nitrogen",
+        "model_id": "nitrogen:default",
         "repo": MODEL_REPO,
         "filename": "ng.pt",
         "local_dir": REPO / "models",
         "path": CHECKPOINT,
     },
-    "pizza_tower": {
-        "label": "Dinâmico",
-        "repo": "subbonan/nitrogen-pizza-tower-finetune",
-        "filename": "final_model.pt",
-        "local_dir": REPO / "models" / "pizza_tower",
-        "path": REPO / "models" / "pizza_tower" / "final_model.pt",
-    },
-    "pizza_tower_fast": {
-        "label": "Acelerado",
-        "repo": "subbonan/nitrogen-pizza-tower-finetune",
-        "filename": "final_model_35.pt",
-        "local_dir": REPO / "models" / "pizza_tower",
-        "path": REPO / "models" / "pizza_tower" / "final_model_35.pt",
+    "malecns": {
+        "label": "MaleCNS v1.0 (Experimental)",
+        "engine": "flybrain",
+        "model_id": "malecns:v1.0",
+        "path": FLY_DATA / "brain.npz",
     },
 }
 
@@ -178,6 +174,7 @@ def local_env() -> dict[str, str]:
     env["TRANSFORMERS_CACHE"] = str(REPO / ".cache" / "huggingface" / "transformers")
     env["TORCH_HOME"] = str(REPO / ".cache" / "torch")
     env["PIP_CACHE_DIR"] = str(REPO / ".cache" / "pip")
+    env["FLY_DATA"] = str(FLY_DATA)
     env["PATH"] = str(REPO / ".venv" / "Scripts") + os.pathsep + env.get("PATH", "")
     current_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = str(REPO) + (os.pathsep + current_pythonpath if current_pythonpath else "")
@@ -220,26 +217,56 @@ def preflight(
     if not VENV_PYTHON.exists():
         raise RuntimeError("Ambiente .venv não encontrado. Rode iniciar.bat novamente.")
 
-    if not checkpoint_path.exists():
-        download_checkpoint(model_choice)
+    try:
+        import vgamepad as vg
+    except Exception as exc:
+        if "VIGEM_ERROR_BUS_NOT_FOUND" in str(exc).upper():
+            raise RuntimeError(
+                "O driver de controle virtual ViGEmBus não está instalado ou ativo. "
+                "Execute instalar.bat, escolha Instalar e autorize a etapa "
+                "'Controle virtual do Windows'."
+            ) from exc
+        raise RuntimeError(f"Falha ao carregar o controle virtual: {exc}") from exc
 
-    import torch
-    import vgamepad as vg
-
-    if not torch.cuda.is_available():
-        raise RuntimeError(
-            "PyTorch não encontrou CUDA. O NeveLudens atual exige GPU NVIDIA com CUDA."
-        )
+    if model_choice == "malecns":
+        if importlib.util.find_spec("flybrain") is None:
+            raise RuntimeError("Dependência flybrain ausente. Rode instalar.bat.")
+        required = [FLY_DATA / "brain.npz", FLY_DATA / "weights.npz"]
+        if not all(path.exists() for path in required):
+            print("Dados MaleCNS ausentes. Baixando a cópia processada verificada (~260 MB)...")
+            subprocess.check_call(
+                [str(VENV_PYTHON), "-m", "flybrain", "download"],
+                cwd=REPO,
+                env=local_env(),
+            )
+        print("MaleCNS OK: 166.700 neurônios, execução local por Numba/CPU")
+    else:
+        if not checkpoint_path.exists():
+            download_checkpoint(model_choice)
+        import torch
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "PyTorch não encontrou CUDA. O NeveLudens atual exige GPU NVIDIA com CUDA."
+            )
+        print(f"CUDA OK: {torch.cuda.get_device_name(0)}")
 
     if agent_slot in {"player2", "player2_coop"}:
         print("Controle virtual: validacao adiada para preservar a ordem de Player 2")
     else:
         # Create and release one virtual controller to catch driver problems early.
-        gamepad = vg.VX360Gamepad()
-        gamepad.reset()
-        gamepad.update()
+        try:
+            gamepad = vg.VX360Gamepad()
+            gamepad.reset()
+            gamepad.update()
+        except Exception as exc:
+            if "VIGEM_ERROR_BUS_NOT_FOUND" in str(exc).upper():
+                raise RuntimeError(
+                    "O driver de controle virtual ViGEmBus não está instalado ou ativo. "
+                    "Execute instalar.bat, escolha Instalar e autorize a etapa "
+                    "'Controle virtual do Windows'."
+                ) from exc
+            raise RuntimeError(f"Não foi possível criar o controle virtual: {exc}") from exc
 
-    print(f"CUDA OK: {torch.cuda.get_device_name(0)}")
     if agent_slot not in {"player2", "player2_coop"}:
         print("Controle virtual OK")
     if multimodal_supervisor == "enabled":
@@ -275,6 +302,8 @@ def same_checkpoint(left: str | Path, right: str | Path) -> bool:
 
 def download_checkpoint(model_choice: str = "default") -> None:
     checkpoint_path, spec = resolve_model_choice(model_choice)
+    if spec.get("engine") != "nitrogen":
+        raise RuntimeError(f"{spec['label']} não usa checkpoint NitroGen.")
     print(f"Checkpoint não encontrado. Baixando modelo {spec['label']}...")
     Path(spec["local_dir"]).mkdir(parents=True, exist_ok=True)
     if not HF_EXE.exists():
@@ -425,14 +454,32 @@ def tail(path: Path, lines: int = 80) -> str:
     return "\n".join(data[-lines:])
 
 
-def start_server(port: int, checkpoint_path: Path, env: dict[str, str]) -> tuple[subprocess.Popen, Path]:
+def start_server(
+    port: int,
+    checkpoint_path: Path,
+    model_spec: dict,
+    env: dict[str, str],
+) -> tuple[subprocess.Popen, Path]:
     LOG_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_path = LOG_DIR / f"server_{stamp}.log"
     log_file = log_path.open("w", encoding="utf-8", errors="replace")
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+    if model_spec.get("engine") == "flybrain":
+        command = [
+            str(VENV_PYTHON),
+            "scripts/flybrain_serve.py",
+            "--port",
+            str(port),
+            "--data",
+            str(FLY_DATA),
+            "--telemetry",
+            str(FLY_TELEMETRY),
+        ]
+    else:
+        command = [str(VENV_PYTHON), "scripts/serve.py", str(checkpoint_path), "--port", str(port)]
     proc = subprocess.Popen(
-        [str(VENV_PYTHON), "scripts/serve.py", str(checkpoint_path), "--port", str(port)],
+        command,
         cwd=REPO,
         env=env,
         stdout=log_file,
@@ -441,6 +488,17 @@ def start_server(port: int, checkpoint_path: Path, env: dict[str, str]) -> tuple
     )
     print(f"Servidor iniciando em segundo plano. Log: {log_path}")
     return proc, log_path
+
+
+def server_matches(info: dict | None, checkpoint_path: Path, model_spec: dict) -> bool:
+    if info is None:
+        return False
+    expected_id = str(model_spec.get("model_id", ""))
+    if expected_id and info.get("model_id") == expected_id:
+        return True
+    return model_spec.get("engine") == "nitrogen" and same_checkpoint(
+        info.get("ckpt_path", ""), checkpoint_path
+    )
 
 
 def wait_for_server(
@@ -631,7 +689,10 @@ def main(argv: list[str] | None = None) -> int:
     auto_control_calibration = args.auto_control_calibration
     special_init = process_name.lower() in {"isaac-ng.exe", "cuphead.exe"} and not args.no_special_init
     print(f"Modelo selecionado: {model_spec['label']}")
-    print(f"Checkpoint: {checkpoint_path}")
+    if model_spec.get("engine") == "flybrain":
+        print(f"Dados MaleCNS: {FLY_DATA}")
+    else:
+        print(f"Checkpoint: {checkpoint_path}")
     if special_init:
         print("Macro especial de inicialização ativada para este jogo.")
     if allow_menu:
@@ -652,7 +713,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if raw_port_open(port):
         info = server_info(port)
-        if info is not None and same_checkpoint(info.get("ckpt_path", ""), checkpoint_path):
+        if server_matches(info, checkpoint_path, model_spec):
             print(f"Usando servidor NeveLudens que ja esta rodando na porta {port}.")
             server_proc = None
             log_path = None
@@ -663,13 +724,19 @@ def main(argv: list[str] | None = None) -> int:
             new_port = find_free_port(port + 1)
             print(f"Porta {port} está ocupada. Vou usar {new_port}.")
             port = new_port
-            server_proc, log_path = start_server(port, checkpoint_path, env)
+            server_proc, log_path = start_server(port, checkpoint_path, model_spec, env)
             info = wait_for_server(server_proc, port, log_path, stop_file=stop_file)
     else:
-        server_proc, log_path = start_server(port, checkpoint_path, env)
+        server_proc, log_path = start_server(port, checkpoint_path, model_spec, env)
         info = wait_for_server(server_proc, port, log_path, stop_file=stop_file)
 
-    print(f"Modelo: {Path(info.get('ckpt_path', str(CHECKPOINT))).name}")
+    if model_spec.get("engine") == "flybrain":
+        print(
+            f"Motor: MaleCNS v1.0 ({info.get('neurons', 166700):,} neurônios; "
+            f"dispositivo {info.get('device', 'cpu')})"
+        )
+    else:
+        print(f"Modelo: {Path(info.get('ckpt_path', str(CHECKPOINT))).name}")
     print(f"Jogo/processo: {process_name}")
     print(f"Porta: {port}")
     print("Captura: dxcam com fallback conservador para pyautogui")

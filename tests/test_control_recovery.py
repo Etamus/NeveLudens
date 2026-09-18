@@ -5,11 +5,13 @@ import unittest
 import numpy as np
 
 from neveludens.control_calibration import AutomaticControlCalibration
+from neveludens.legacy_anti_loop import LegacyAntiLoopMemory, LegacyAntiLoopSkills
 from neveludens.memory import TemporalMemory
 from neveludens.perception import PerceptionState
 from neveludens.profiles import DEFAULT_PROFILE
 from neveludens.runtime_options import memory_mode_flags, resolve_memory_mode
 from neveludens.skills import SkillLibrary
+from neveludens.supervisor import ObjectiveSupervisor
 
 
 def perception(*, motion: float) -> PerceptionState:
@@ -123,6 +125,41 @@ class MemoryModeTests(unittest.TestCase):
             resolve_memory_mode(None, legacy_smart_recovery=False),
             "disabled",
         )
+
+    def test_temporary_uses_the_original_anti_loop(self):
+        supervisor = ObjectiveSupervisor(
+            process_name="example.exe",
+            allow_menu=False,
+            enable_recovery=True,
+            legacy_anti_loop=True,
+        )
+        self.assertIsInstance(supervisor.memory, LegacyAntiLoopMemory)
+        self.assertIsInstance(supervisor.skills, LegacyAntiLoopSkills)
+
+        supervisor.memory.low_motion_streak = DEFAULT_PROFILE.low_motion_limit
+        output = actions(x=24000, count=12)
+        decision = supervisor.skills.apply_first(
+            output,
+            perception(motion=0.0),
+            supervisor.memory,
+            DEFAULT_PROFILE,
+            step=10,
+        )
+        self.assertEqual(decision.name, "unstuck")
+        self.assertEqual(int(output[0]["AXIS_LEFTX"][0]), 26000)
+        self.assertEqual(int(output[0]["AXIS_LEFTY"][0]), 0)
+        self.assertEqual(int(output[0]["AXIS_RIGHTX"][0]), 0)
+        self.assertEqual(int(output[0]["AXIS_RIGHTY"][0]), -26000)
+
+    def test_persistent_keeps_the_reworked_recovery(self):
+        supervisor = ObjectiveSupervisor(
+            process_name="example.exe",
+            allow_menu=False,
+            enable_recovery=True,
+            legacy_anti_loop=False,
+        )
+        self.assertIsInstance(supervisor.memory, TemporalMemory)
+        self.assertIsInstance(supervisor.skills, SkillLibrary)
 
 
 if __name__ == "__main__":

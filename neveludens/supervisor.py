@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import Image
 
 from neveludens.control_calibration import AutomaticControlCalibration
+from neveludens.legacy_anti_loop import LegacyAntiLoopMemory, LegacyAntiLoopSkills
 from neveludens.memory import TemporalMemory
 from neveludens.perception import PerceptionAnalyzer, PerceptionState
 from neveludens.profiles import GameProfile, get_profile
@@ -37,15 +38,23 @@ class ObjectiveSupervisor:
         enable_recovery: bool = True,
         enable_skills: bool = True,
         enable_control_calibration: bool = False,
+        legacy_anti_loop: bool = False,
         log_path: Path | None = None,
     ):
         self.enable_recovery = enable_recovery
         self.profile: GameProfile = get_profile(process_name)
         self.allow_menu = allow_menu
         self.perception = PerceptionAnalyzer()
-        self.memory = TemporalMemory() if enable_recovery else None
+        self.legacy_anti_loop = bool(legacy_anti_loop and enable_recovery)
+        self.memory = (
+            LegacyAntiLoopMemory() if self.legacy_anti_loop else TemporalMemory()
+        ) if enable_recovery else None
         self.calibration = AutomaticControlCalibration(enabled=enable_control_calibration)
-        self.skills = SkillLibrary(enabled=enable_skills and enable_recovery)
+        self.skills = (
+            LegacyAntiLoopSkills(enabled=enable_skills)
+            if self.legacy_anti_loop
+            else SkillLibrary(enabled=enable_skills and enable_recovery)
+        )
         self.log_path = log_path
         self.latest_perception: PerceptionState | None = None
         if self.log_path is not None:
@@ -119,7 +128,7 @@ class ObjectiveSupervisor:
 
     def record_executed_actions(self, actions: list[dict]) -> None:
         """Record only the final action slice that was sent to the controller."""
-        if self.memory is not None:
+        if self.memory is not None and hasattr(self.memory, "record_executed_actions"):
             self.memory.record_executed_actions(actions)
         self.calibration.record_executed_actions(actions)
 

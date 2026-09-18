@@ -7,6 +7,7 @@ cd /d "%~dp0"
 set "ROOT=%CD%"
 set "VENV_PY=%ROOT%\.venv\Scripts\python.exe"
 set "MODEL_PATH=%ROOT%\models\ng.pt"
+set "FLY_DATA=%ROOT%\.cache\malecns"
 set "PYTHON_CMD="
 
 set "PYTHONUTF8=1"
@@ -80,11 +81,15 @@ call :step "3. Dependencias do NeveLudens"
 call :run "%VENV_PY%" -m pip install -e .
 if errorlevel 1 exit /b 1
 
-call :step "4. PyTorch CUDA local"
+call :step "4. Controle virtual do Windows"
+call :ensure_vigem
+if errorlevel 1 exit /b 1
+
+call :step "5. PyTorch CUDA local"
 call :run "%VENV_PY%" -m pip install --force-reinstall torch==2.13.0+cu132 torchvision==0.28.0+cu132 --index-url https://download.pytorch.org/whl/cu132 --extra-index-url https://pypi.org/simple
 if errorlevel 1 exit /b 1
 
-call :step "5. Checkpoint do modelo"
+call :step "6. Checkpoint do modelo"
 if exist "%MODEL_PATH%" (
     echo Modelo ja existe: %MODEL_PATH%
 ) else (
@@ -92,14 +97,71 @@ if exist "%MODEL_PATH%" (
     if errorlevel 1 exit /b 1
 )
 
-call :step "6. Validacao"
-call :run "%VENV_PY%" -c "import sys, torch, torchvision, neveludens, cv2, dxcam, vgamepad, xspeedhack, zmq, transformers, accelerate, bitsandbytes, safetensors; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('bitsandbytes:', bitsandbytes.__version__); cuda=torch.cuda.is_available(); print('CUDA disponivel:', cuda); sys.exit(0 if cuda else 2)"
+call :step "7. Dados do MaleCNS v1.0"
+set "MALECNS_READY="
+if exist "%FLY_DATA%\brain.npz" if exist "%FLY_DATA%\weights.npz" set "MALECNS_READY=1"
+if defined MALECNS_READY (
+    echo MaleCNS ja existe: %FLY_DATA%
+) else (
+    call :run "%VENV_PY%" -m flybrain download
+    if errorlevel 1 exit /b 1
+)
+
+call :step "8. Validacao"
+call :run "%VENV_PY%" -c "import torch, torchvision, neveludens, flybrain, cv2, dxcam, vgamepad, xspeedhack, zmq, transformers, accelerate, bitsandbytes, safetensors; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('bitsandbytes:', bitsandbytes.__version__); print('flybrain:', getattr(flybrain, '__version__', '0.1.0')); print('CUDA disponivel:', torch.cuda.is_available())"
 if errorlevel 1 exit /b 1
 
-call :run "%VENV_PY%" -c "import torch, vgamepad; print('GPU:', torch.cuda.get_device_name(0)); gamepad=vgamepad.VX360Gamepad(); gamepad.reset(); gamepad.update(); print('Controle virtual: OK'); print('Importacoes principais: OK')"
+call :run "%VENV_PY%" -c "import torch, vgamepad; print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CUDA indisponivel; use MaleCNS em CPU'); gamepad=vgamepad.VX360Gamepad(); gamepad.reset(); gamepad.update(); print('Controle virtual: OK'); print('Importacoes principais: OK')"
 if errorlevel 1 exit /b 1
 
 exit /b 0
+
+:ensure_vigem
+call :test_vigem
+if not errorlevel 1 (
+    echo ViGEmBus: instalado e funcionando.
+    exit /b 0
+)
+
+set "VIGEM_MSI=%ROOT%\.venv\Lib\site-packages\vgamepad\win\vigem\install\x64\ViGEmBusSetup_x64.msi"
+if not exist "%VIGEM_MSI%" (
+    echo ERRO: o instalador local do ViGEmBus nao foi encontrado:
+    echo %VIGEM_MSI%
+    exit /b 1
+)
+
+echo.
+echo O NeveLudens precisa do driver ViGEmBus para criar o controle virtual.
+echo O instalador ja esta incluido no pacote vgamepad dentro da .venv.
+echo Esta etapa altera somente o driver de controle virtual do Windows.
+echo.
+choice /c SN /n /m "Instalar ou reparar o ViGEmBus agora? [S/N]: "
+if errorlevel 2 (
+    echo Instalacao do controle virtual cancelada.
+    exit /b 1
+)
+
+echo Solicitando permissao de administrador para instalar o controle virtual...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$msi = [char]34 + $env:VIGEM_MSI + [char]34; $p = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/i', $msi, '/passive', '/norestart') -Verb RunAs -Wait -PassThru; if ($p.ExitCode -notin 0, 3010, 1641) { exit 1 }"
+if errorlevel 1 (
+    echo ERRO: o instalador do ViGEmBus nao foi concluido.
+    exit /b 1
+)
+
+timeout /t 2 /nobreak >nul
+call :test_vigem
+if not errorlevel 1 (
+    echo ViGEmBus: instalado e funcionando.
+    exit /b 0
+)
+
+echo O ViGEmBus foi instalado, mas o Windows ainda nao disponibilizou o driver.
+echo Reinicie o computador e execute instalar.bat novamente.
+exit /b 1
+
+:test_vigem
+"%VENV_PY%" -c "import vgamepad; gamepad=vgamepad.VX360Gamepad(); gamepad.reset(); gamepad.update()" >nul 2>nul
+exit /b %ERRORLEVEL%
 
 :banner
 echo ================================================================
@@ -113,6 +175,7 @@ exit /b 0
 if not exist ".cache\pip" mkdir ".cache\pip" >nul 2>nul
 if not exist ".cache\huggingface" mkdir ".cache\huggingface" >nul 2>nul
 if not exist ".cache\torch" mkdir ".cache\torch" >nul 2>nul
+if not exist ".cache\malecns" mkdir ".cache\malecns" >nul 2>nul
 if not exist "models" mkdir "models" >nul 2>nul
 if not exist "logs" mkdir "logs" >nul 2>nul
 if not exist "out" mkdir "out" >nul 2>nul
@@ -232,10 +295,24 @@ if exist "%MODEL_PATH%" (
     echo Modelo: nao encontrado em %MODEL_PATH%
 )
 
+set "MALECNS_READY="
+if exist "%FLY_DATA%\brain.npz" if exist "%FLY_DATA%\weights.npz" set "MALECNS_READY=1"
+if defined MALECNS_READY (
+    echo MaleCNS: encontrado em %FLY_DATA%
+) else (
+    echo MaleCNS: dados nao encontrados em %FLY_DATA%
+)
+
 if exist "%VENV_PY%" (
     echo.
     echo Validacao rapida:
     call :run "%VENV_PY%" -c "import torch, neveludens; print('torch:', torch.__version__); print('CUDA disponivel:', torch.cuda.is_available())"
+    call :test_vigem
+    if not errorlevel 1 (
+        echo Controle virtual ViGEmBus: OK
+    ) else (
+        echo Controle virtual ViGEmBus: ausente ou indisponivel
+    )
 )
 exit /b 0
 
