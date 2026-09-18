@@ -52,7 +52,7 @@ Abre a interface principal em WPF. O `iniciar.bat` chama a GUI local por PowerSh
 - Escolher o modo de jogo: `Padrão`, `Jogo de luta` ou `Tela dividida`.
 - Escolher o modo de jogador: `Automático`, `Player 2` ou `Jogador 2 (Co-op)`.
 - Escolher o supervisor multimodal: `Desativado` ou `Ativado`.
-- Escolher o nível da Recuperação inteligente: `Padrão`, `Temporário` ou `Persistente`.
+- Escolher o nível da Recuperação inteligente: `Desativado`, `Temporário` ou `Persistente`.
 - Ativar ou desativar **Permitir acesso de menus**, que controla `START`, `BACK` e `GUIDE`.
 - Iniciar e parar o agente.
 - Rodar diagnóstico de captura.
@@ -113,7 +113,7 @@ Supervisor multimodal:
 
 Recuperação inteligente:
 
-- `Padrão`: não mantém memória temporal, não executa anti-loop e não cria memória persistente.
+- `Desativado`: não mantém memória temporal, não executa anti-loop e não cria memória persistente.
 - `Temporário`: reproduz exatamente o anti-loop anterior à reformulação. Observa baixa movimentação visual e repetição de ações durante a sessão e usa a sequência fixa de escapes original.
 - `Persistente`: usa a recuperação reformulada baseada no resultado visual e acrescenta memória de lugares, resultados por jogo, arquivo em `memories/` e resumo para a VLM. Ele não acumula o anti-loop legado do modo Temporário.
 - Ficar parado, atacar ou esperar não é suficiente para acionar recuperação; são exigidas várias tentativas reais de movimento sem resultado.
